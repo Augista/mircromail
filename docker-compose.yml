@@ -1,0 +1,163 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Databases
+  auth_db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: auth_user
+      POSTGRES_PASSWORD: auth_password
+      POSTGRES_DB: auth_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - auth_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U auth_user"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  composer_db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: composer_user
+      POSTGRES_PASSWORD: composer_password
+      POSTGRES_DB: composer_db
+    ports:
+      - "5433:5432"
+    volumes:
+      - composer_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U composer_user"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  storage_db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: storage_user
+      POSTGRES_PASSWORD: storage_password
+      POSTGRES_DB: storage_db
+    ports:
+      - "5434:5432"
+    volumes:
+      - storage_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U storage_user"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # RabbitMQ Message Queue
+  rabbitmq:
+    image: rabbitmq:3.12-management-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # API Gateway
+  api_gateway:
+    build:
+      context: ./services/gateway
+      dockerfile: Dockerfile
+    environment:
+      AUTH_SERVICE_URL: http://auth_service:8001
+      COMPOSER_SERVICE_URL: http://composer_service:8002
+      STORAGE_SERVICE_URL: http://storage_service:8003
+      DELIVERY_SERVICE_URL: http://delivery_service:8004
+      SECRET_KEY: your-secret-key-change-in-production
+    ports:
+      - "8000:8000"
+    depends_on:
+      - auth_service
+      - composer_service
+      - storage_service
+      - delivery_service
+
+  # Auth Service
+  auth_service:
+    build:
+      context: ./services/auth
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgresql://auth_user:auth_password@auth_db:5432/auth_db
+      SECRET_KEY: your-secret-key-change-in-production
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+    ports:
+      - "8001:8001"
+    depends_on:
+      auth_db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  # Mail Composer Service
+  composer_service:
+    build:
+      context: ./services/composer
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgresql://composer_user:composer_password@composer_db:5432/composer_db
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+    ports:
+      - "8002:8002"
+    depends_on:
+      composer_db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  # Mail Storage Service
+  storage_service:
+    build:
+      context: ./services/storage
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgresql://storage_user:storage_password@storage_db:5432/storage_db
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+    ports:
+      - "8003:8003"
+    depends_on:
+      storage_db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  # Mail Delivery Service
+  delivery_service:
+    build:
+      context: ./services/delivery
+      dockerfile: Dockerfile
+    environment:
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+      SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASSWORD: ${SMTP_PASSWORD}
+    ports:
+      - "8004:8004"
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+
+volumes:
+  auth_db_data:
+  composer_db_data:
+  storage_db_data:
+  rabbitmq_data:
+
+networks:
+  default:
+    name: micromail_network
