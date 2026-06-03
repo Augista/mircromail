@@ -28,6 +28,8 @@ interface DBEmail {
 
 interface UIEmail extends DBEmail {
   timestamp: Date
+  fromName: string
+  preview: string
 }
 
 export default function InboxPage() {
@@ -79,7 +81,7 @@ export default function InboxPage() {
   return (
     <div className="flex h-full">
       <div className="flex-1 border-r border-border flex flex-col overflow-auto">
-        <div className="p-4 border-b border-border flex-shrink-0">
+        <div className="p-4 border-b border-border shrink-0">
           {/* <MailSearch onSearch={setSearchQuery} /> */}
         </div>
         <div className="flex-1 overflow-auto">
