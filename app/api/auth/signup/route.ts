@@ -38,7 +38,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Hash password and create user
     const passwordHash = await hashPassword(password)
     const userId = uuidv4()
 

@@ -37,7 +37,6 @@ export default function InboxPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const { data: rawEmails = [], mutate } = useSWR('/api/emails', fetcher)
 
-  // Transform database emails to UI format
   const emails: UIEmail[] = useMemo(() => {
     return rawEmails.map((email: DBEmail) => ({
       ...email,
@@ -49,7 +48,6 @@ export default function InboxPage() {
 
   const selectedEmail = emails.find((email) => email.id === selectedEmailId)
 
-  // Filter emails based on search query
   const filteredEmails = useMemo(() => {
     if (!searchQuery) return emails
     const query = searchQuery.toLowerCase()

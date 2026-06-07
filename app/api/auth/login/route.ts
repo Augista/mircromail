@@ -16,7 +16,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Find user by email
     const user = await db
       .select()
       .from(users)
@@ -32,7 +31,6 @@ export async function POST(request: NextRequest) {
 
     const dbUser = user[0]
 
-    // Verify password
     const isValidPassword = await verifyPassword(password, dbUser.passwordHash)
     if (!isValidPassword) {
       return NextResponse.json(
@@ -41,7 +39,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Generate JWT token
     const token = generateToken({
       userId: dbUser.id,
       email: dbUser.email,
