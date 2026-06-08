@@ -1,210 +1,237 @@
-/**
- * API Client for MicroMail
- * Handles all communication with the API Gateway
- */
+// /**
+//  * API Client for MicroMail
+//  * Handles all communication with the API Gateway
+//  */
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+// const API_Gateway_URL = process.env.NEXT_PUBLIC_API_GATEWAY_URL || 'http://localhost:8000'
+// const AuthServiceURL = process.env.NEXT_PUBLIC_AUTH_SERVICE_URL || 'http://localhost:8001'
 
-interface RequestOptions extends RequestInit {
-  params?: Record<string, string | number | boolean>
-}
+// interface RequestOptions extends RequestInit {
+//   params?: Record<string, string | number | boolean>
+// }
 
-export class APIError extends Error {
-  constructor(
-    public status: number,
-    public message: string,
-    public details?: unknown
-  ) {
-    super(message)
-  }
-}
+// export class APIError extends Error {
+//   constructor(
+//     public status: number,
+//     public message: string,
+//     public details?: unknown
+//   ) {
+//     super(message)
+//   }
+// }
 
-/**
- * Make an API request with automatic token handling and error handling
- */
-export async function apiRequest<T>(
-  endpoint: string,
-  options: RequestOptions = {}
-): Promise<T> {
-  const { params, ...fetchOptions } = options
+// interface AuthUser {
+//   id: string
+//   email: string
+//   name: string
+// }
 
-  // Build URL with query parameters
-  const url = new URL(`${API_URL}${endpoint}`)
-  if (params) {
-    Object.entries(params).forEach(([key, value]) => {
-      url.searchParams.append(key, String(value))
-    })
-  }
+// interface AuthResponse {
+//   user: AuthUser
+//   access_token: string
+//   refresh_token: string
+//   token_type: string
+//   expires_in: number
+// }
 
-  // Get auth token from localStorage
-  const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
+// interface TokenResponse {
+//   access_token: string
+//   refresh_token: string
+//   token_type: string
+//   expires_in: number
+// }
 
-  // Set up headers
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    ...fetchOptions.headers,
-  }
+// /**
+//  * Make an API request with automatic token handling and error handling
+//  */
+// export async function apiRequest<T>(
+//   endpoint: string,
+//   options: RequestOptions = {}
+// ): Promise<T> {
+//   const { params, ...fetchOptions } = options
 
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`
-  }
+//   // Build URL with query parameters
+//   const url = new URL(`${API_URL}${endpoint}`)
+//   if (params) {
+//     Object.entries(params).forEach(([key, value]) => {
+//       url.searchParams.append(key, String(value))
+//     })
+//   }
 
-  // Make request
-  const response = await fetch(url.toString(), {
-    ...fetchOptions,
-    headers,
-  })
+//   // Get auth token from localStorage
+//   const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
 
-  // Handle errors
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}))
-    throw new APIError(
-      response.status,
-      errorData.detail || response.statusText,
-      errorData
-    )
-  }
+//   // Set up headers reliably for all HeadersInit shapes
+//   const headers = new Headers({
+//     'Content-Type': 'application/json',
+//   })
 
-  // Return parsed response
-  return response.json()
-}
+//   if (fetchOptions.headers) {
+//     new Headers(fetchOptions.headers).forEach((value, name) => {
+//       headers.set(name, value)
+//     })
+//   }
 
-/**
- * Auth API endpoints
- */
-export const authAPI = {
-  register: async (name: string, email: string, password: string) => {
-    return apiRequest<{ access_token: string; refresh_token: string; token_type: string }>(
-      '/api/auth/register',
-      {
-        method: 'POST',
-        body: JSON.stringify({ name, email, password }),
-      }
-    )
-  },
+//   if (token) {
+//     headers.set('Authorization', `Bearer ${token}`)
+//   }
 
-  login: async (email: string, password: string) => {
-    return apiRequest<{ access_token: string; refresh_token: string; token_type: string }>(
-      '/api/auth/login',
-      {
-        method: 'POST',
-        body: JSON.stringify({ email, password }),
-      }
-    )
-  },
+//   // Make request
+//   const response = await fetch(url.toString(), {
+//     ...fetchOptions,
+//     headers,
+//   })
 
-  refresh: async (refreshToken: string) => {
-    return apiRequest<{ access_token: string; refresh_token: string; token_type: string }>(
-      '/api/auth/refresh',
-      {
-        method: 'POST',
-        body: JSON.stringify({ refresh_token: refreshToken }),
-      }
-    )
-  },
+//   // Handle errors
+//   if (!response.ok) {
+//     const errorData = await response.json().catch(() => ({}))
+//     throw new APIError(
+//       response.status,
+//       errorData.detail || response.statusText,
+//       errorData
+//     )
+//   }
 
-  verify: async () => {
-    return apiRequest<{ id: string; name: string; email: string; created_at: string }>(
-      '/api/auth/verify',
-      { method: 'POST' }
-    )
-  },
+//   // Return parsed response
+//   return response.json()
+// }
 
-  logout: async () => {
-    return apiRequest('/api/auth/logout', { method: 'POST' })
-  },
-}
+// /**
+//  * Auth API endpoints
+//  */
+// export const authAPI = {
+//   register: async (name: string, email: string, password: string) => {
+//     return apiRequest<AuthResponse>(
+//       '/api/auth/register',
+//       {
+//         method: 'POST',
+//         body: JSON.stringify({ name, email, password }),
+//       }
+//     )
+//   },
 
-/**
- * Drafts API endpoints
- */
-export const draftsAPI = {
-  list: async () => {
-    return apiRequest('/api/drafts', { method: 'GET' })
-  },
+//   login: async (email: string, password: string) => {
+//     return apiRequest<AuthResponse>(
+//       '/api/auth/login',
+//       {
+//         method: 'POST',
+//         body: JSON.stringify({ email, password }),
+//       }
+//     )
+//   },
 
-  create: async (data: { to: string; subject: string; body: string }) => {
-    return apiRequest('/api/drafts', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    })
-  },
+//   refresh: async (refreshToken: string) => {
+//     return apiRequest<{ access_token: string; refresh_token: string; token_type: string }>(
+//       '/api/auth/refresh',
+//       {
+//         method: 'POST',
+//         body: JSON.stringify({ refresh_token: refreshToken }),
+//       }
+//     )
+//   },
 
-  get: async (draftId: string) => {
-    return apiRequest(`/api/drafts/${draftId}`, { method: 'GET' })
-  },
+//   verify: async () => {
+//     return apiRequest<{ id: string; name: string; email: string; created_at: string }>(
+//       '/api/auth/verify',
+//       { method: 'POST' }
+//     )
+//   },
 
-  update: async (draftId: string, data: Partial<{ to: string; subject: string; body: string }>) => {
-    return apiRequest(`/api/drafts/${draftId}`, {
-      method: 'PUT',
-      body: JSON.stringify(data),
-    })
-  },
+//   logout: async () => {
+//     return apiRequest('/api/auth/logout', { method: 'POST' })
+//   },
+// }
 
-  delete: async (draftId: string) => {
-    return apiRequest(`/api/drafts/${draftId}`, { method: 'DELETE' })
-  },
+// /**
+//  * Drafts API endpoints
+//  */
+// export const draftsAPI = {
+//   list: async () => {
+//     return apiRequest('/api/drafts', { method: 'GET' })
+//   },
 
-  send: async (draftId: string) => {
-    return apiRequest(`/api/drafts/${draftId}/send`, { method: 'POST' })
-  },
-}
+//   create: async (data: { to: string; subject: string; body: string }) => {
+//     return apiRequest('/api/drafts', {
+//       method: 'POST',
+//       body: JSON.stringify(data),
+//     })
+//   },
 
-/**
- * Inbox API endpoints
- */
-export const inboxAPI = {
-  list: async (page = 1, limit = 20) => {
-    return apiRequest('/api/inbox', {
-      method: 'GET',
-      params: { page, limit },
-    })
-  },
+//   get: async (draftId: string) => {
+//     return apiRequest(`/api/drafts/${draftId}`, { method: 'GET' })
+//   },
 
-  get: async (emailId: string) => {
-    return apiRequest(`/api/emails/${emailId}`, { method: 'GET' })
-  },
+//   update: async (draftId: string, data: Partial<{ to: string; subject: string; body: string }>) => {
+//     return apiRequest(`/api/drafts/${draftId}`, {
+//       method: 'PUT',
+//       body: JSON.stringify(data),
+//     })
+//   },
 
-  delete: async (emailId: string) => {
-    return apiRequest(`/api/emails/${emailId}`, { method: 'DELETE' })
-  },
+//   delete: async (draftId: string) => {
+//     return apiRequest(`/api/drafts/${draftId}`, { method: 'DELETE' })
+//   },
 
-  search: async (query: string) => {
-    return apiRequest('/api/search', {
-      method: 'GET',
-      params: { q: query },
-    })
-  },
-}
+//   send: async (draftId: string) => {
+//     return apiRequest(`/api/drafts/${draftId}/send`, { method: 'POST' })
+//   },
+// }
 
-/**
- * Sent emails API endpoints
- */
-export const sentAPI = {
-  list: async (page = 1, limit = 20) => {
-    return apiRequest('/api/sent', {
-      method: 'GET',
-      params: { page, limit },
-    })
-  },
+// /**
+//  * Inbox API endpoints
+//  */
+// export const inboxAPI = {
+//   list: async (page = 1, limit = 20) => {
+//     return apiRequest('/api/inbox', {
+//       method: 'GET',
+//       params: { page, limit },
+//     })
+//   },
 
-  get: async (emailId: string) => {
-    return apiRequest(`/api/emails/${emailId}`, { method: 'GET' })
-  },
-}
+//   get: async (emailId: string) => {
+//     return apiRequest(`/api/emails/${emailId}`, { method: 'GET' })
+//   },
 
-/**
- * Trash API endpoints
- */
-export const trashAPI = {
-  list: async (page = 1, limit = 20) => {
-    return apiRequest('/api/trash', {
-      method: 'GET',
-      params: { page, limit },
-    })
-  },
+//   delete: async (emailId: string) => {
+//     return apiRequest(`/api/emails/${emailId}`, { method: 'DELETE' })
+//   },
 
-  delete: async (emailId: string) => {
-    return apiRequest(`/api/emails/${emailId}`, { method: 'DELETE' })
-  },
-}
+//   search: async (query: string) => {
+//     return apiRequest('/api/search', {
+//       method: 'GET',
+//       params: { q: query },
+//     })
+//   },
+// }
+
+// /**
+//  * Sent emails API endpoints
+//  */
+// export const sentAPI = {
+//   list: async (page = 1, limit = 20) => {
+//     return apiRequest('/api/sent', {
+//       method: 'GET',
+//       params: { page, limit },
+//     })
+//   },
+
+//   get: async (emailId: string) => {
+//     return apiRequest(`/api/emails/${emailId}`, { method: 'GET' })
+//   },
+// }
+
+// /**
+//  * Trash API endpoints
+//  */
+// export const trashAPI = {
+//   list: async (page = 1, limit = 20) => {
+//     return apiRequest('/api/trash', {
+//       method: 'GET',
+//       params: { page, limit },
+//     })
+//   },
+
+//   delete: async (emailId: string) => {
+//     return apiRequest(`/api/emails/${emailId}`, { method: 'DELETE' })
+//   },
+// }

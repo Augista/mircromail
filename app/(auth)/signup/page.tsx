@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Mail } from 'lucide-react'
+import { authAPI } from '@/lib/authApi'
 
 export default function SignupPage() {
   const router = useRouter()
@@ -37,23 +38,9 @@ export default function SignupPage() {
     setLoading(true)
 
     try {
-      const response = await fetch('/api/auth/signup', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: formData.name,
-          email: formData.email,
-          password: formData.password,
-        }),
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || 'Signup failed')
-      }
-
-      const data = await response.json()
-      localStorage.setItem('token', data.token)
+      const data = await authAPI.register(formData.name, formData.email, formData.password)
+      localStorage.setItem('auth_token', data.access_token)
+      localStorage.setItem('refresh_token', data.refresh_token)
       localStorage.setItem('user', JSON.stringify(data.user))
 
       // Redirect to mail interface

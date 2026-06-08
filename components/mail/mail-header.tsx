@@ -24,40 +24,20 @@ export default function MailHeader() {
   const [user, setUser] = useState<UserData | null>(null)
 
   useEffect(() => {
-    const loadUser = async () => {
+    const storedUser = localStorage.getItem('user')
+    if (storedUser) {
       try {
-        const token = localStorage.getItem('token')
-        console.log('token', token)
-
-        if (!token) return
-
-        const response = await fetch('/api/auth/me', {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-  
-
-        })        
-        console.log('status', response.status)
-        if (!response.ok) {
-          throw new Error('Failed to load user')
-        }
-
-        const data = await response.json()
-        console.log('data', data)
-
-
-        setUser(data.user)
+        setUser(JSON.parse(storedUser))
       } catch (error) {
-        console.error('Error loading user:', error)
+        console.error('Error parsing user from storage:', error)
       }
     }
-
-    loadUser()
   }, [])
 
   const handleLogout = () => {
     localStorage.removeItem('auth_token')
+    localStorage.removeItem('refresh_token')
+    localStorage.removeItem('user')
     router.push('/login')
   }
 

@@ -1,9 +1,14 @@
-from fastapi import FastAPI, HTTPException, status
+from fastapi import FastAPI, HTTPException, Request, status
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session
 import logging
 import sys
 import os
+from uuid import UUID
+from fastapi.middleware.cors import CORSMiddleware
+from datetime import datetime, timedelta, timezone
+
+
 
 # Add parent directory to path
 sys.path.insert(0, os.path.dirname(__file__))
@@ -24,6 +29,17 @@ app = FastAPI(
     title="MicroMail Auth Service",
     description="User authentication and JWT token management",
     version="1.0.0"
+)
+
+origins = [  "http://localhost",
+    "http://localhost:3000",]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # Database setup
@@ -83,10 +99,11 @@ async def register(request: UserRegister):
         refresh_token = JWTManager.create_refresh_token(str(user.id), user.email)
         
         # Store refresh token
+        refresh_token_payload = JWTManager.verify_token(refresh_token)
         refresh_token_obj = RefreshToken(
             user_id=user.id,
             token=refresh_token,
-            expires_at=JWTManager.verify_token(refresh_token)['exp']
+            expires_at=datetime.fromtimestamp(refresh_token_payload['exp'], tz=timezone.utc)
         )
         db.add(refresh_token_obj)
         db.commit()
@@ -142,7 +159,7 @@ async def login(request: UserLogin):
         refresh_token_obj = RefreshToken(
             user_id=user.id,
             token=refresh_token,
-            expires_at=refresh_token_payload['exp']
+            expires_at=datetime.fromtimestamp(refresh_token_payload['exp'], tz=timezone.utc)
         )
         db.add(refresh_token_obj)
         db.commit()
@@ -212,6 +229,55 @@ async def refresh_access_token(request: RefreshTokenRequest):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Token refresh failed"
+        )
+    finally:
+        db.close()
+
+
+@app.get('/me', response_model=UserResponse)
+async def get_current_user(request: Request):
+    """Get current authenticated user"""
+    db = SessionLocal()
+    try:
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail='Missing or invalid authorization header'
+            )
+
+        token = auth_header.split(' ', 1)[1]
+        payload = JWTManager.verify_token(token)
+        if not payload or payload.get('type') != 'access':
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail='Invalid or expired access token'
+            )
+
+        user_id = payload.get('sub')
+        try:
+            user_id = UUID(user_id)
+        except Exception:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail='Invalid token subject'
+            )
+
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail='User not found'
+            )
+
+        return UserResponse.from_orm(user)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Get current user error: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail='Failed to load current user'
         )
     finally:
         db.close()

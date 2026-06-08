@@ -35,16 +35,18 @@ interface UIEmail extends DBEmail {
 export default function InboxPage() {
   const [selectedEmailId, setSelectedEmailId] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
-  const { data: rawEmails = [], mutate } = useSWR('/api/emails', fetcher)
 
-  const emails: UIEmail[] = useMemo(() => {
-    return rawEmails.map((email: DBEmail) => ({
-      ...email,
-      timestamp: new Date(email.createdAt),
-      fromName: email.fromName || email.from.split('@')[0],
-      preview: email.preview || email.body.substring(0, 50) + '...',
-    }))
-  }, [rawEmails])
+  const { data: rawEmails, mutate } = useSWR('/api/emails', fetcher)
+
+const emails: UIEmail[] = useMemo(() => {
+  if (!Array.isArray(rawEmails)) return []  
+  return rawEmails.map((email: DBEmail) => ({
+    ...email,
+    timestamp: new Date(email.createdAt),
+    fromName: email.fromName || email.from.split('@')[0],
+    preview: email.preview || email.body.substring(0, 50) + '...',
+  }))
+}, [rawEmails])
 
   const selectedEmail = emails.find((email) => email.id === selectedEmailId)
 

@@ -92,6 +92,32 @@ async def login(request: Request):
             )
 
 
+@app.get("/api/auth/me")
+async def get_current_user(request: Request):
+    """Forward current user profile request to Auth Service"""
+    auth_header = request.headers.get('authorization')
+    if not auth_header:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='Missing authorization header')
+
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.get(
+                f"{settings.AUTH_SERVICE_URL}/me",
+                headers={"Authorization": auth_header},
+                timeout=10.0
+            )
+            return JSONResponse(
+                status_code=response.status_code,
+                content=response.json()
+            )
+        except httpx.RequestError as e:
+            logger.error(f"Auth Service error: {str(e)}")
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Auth Service unavailable"
+            )
+
+
 @app.post("/api/auth/refresh")
 async def refresh(request: Request):
     """Refresh JWT token - forward to Auth Service"""

@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Mail } from 'lucide-react'
+import { authAPI } from '@/lib/authApi'
 
 export default function RegisterPage() {
   const router = useRouter()
@@ -41,11 +42,12 @@ export default function RegisterPage() {
     setLoading(true)
 
     try {
-      const { authAPI } = await import('@/lib/api')
       const data = await authAPI.register(name, email, password)
       
-      // Store token
+      // Store token and user
       localStorage.setItem('auth_token', data.access_token)
+      localStorage.setItem('refresh_token', data.refresh_token)
+      localStorage.setItem('user', JSON.stringify(data.user))
       
       // Redirect to mail interface
       router.push('/mail/inbox')

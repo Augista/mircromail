@@ -46,7 +46,7 @@ export default function MailListView({
             )}
           >
             <div className="flex items-start gap-3">
-              <Checkbox checked={false} className="mt-1 flex-shrink-0" readOnly />
+              <Checkbox checked={false} className="mt-1 flex-shrink-0" aria-readonly />
               <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between gap-2">
                   <p className="font-medium text-sm text-foreground truncate">
