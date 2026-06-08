@@ -14,7 +14,7 @@ from datetime import datetime, timedelta, timezone
 sys.path.insert(0, os.path.dirname(__file__))
 
 from config import settings
-from models import Base, User, RefreshToken
+from models import User, RefreshToken
 from schemas import (
     UserRegister, UserLogin, RefreshTokenRequest,
     AuthResponse, UserResponse, TokenResponse
@@ -45,9 +45,6 @@ app.add_middleware(
 # Database setup
 engine = create_engine(settings.AUTH_DB_URL, echo=settings.DEBUG)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
-# Create tables
-Base.metadata.create_all(bind=engine)
 
 
 def get_db():
