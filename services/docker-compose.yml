@@ -1,0 +1,53 @@
+services:
+  auth-db:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: auth_db
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: secret
+    volumes:
+      - auth_data:/var/lib/postgresql/data
+
+  notification-db:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: notification_db
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: secret
+    volumes:
+      - notification_data:/var/lib/postgresql/data
+
+  mail-db:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: mail_db
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: secret
+    volumes:
+      - mail_data:/var/lib/postgresql/data
+
+  auth-service:
+    build: ./auth-service
+    environment:
+      DATABASE_URL: postgresql://admin:secret@auth-db:5432/auth_db
+    depends_on:
+      - auth-db
+
+  notification-service:
+    build: ./notification-service
+    environment:
+      DATABASE_URL: postgresql://admin:secret@notification-db:5432/notification_db
+    depends_on:
+      - notification-db
+
+  mail-service:
+    build: ./mail-service
+    environment:
+      DATABASE_URL: postgresql://admin:secret@mail-db:5432/mail_db
+    depends_on:
+      - mail-db
+
+volumes:
+  auth_data:
+  notification_data:
+  mail_data:
