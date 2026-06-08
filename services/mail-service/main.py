@@ -110,14 +110,15 @@ def get_mail(mail_id: int, db: Session = Depends(get_db)):
 @app.delete("/mails/{mail_id}")
 def delete_mail(
     mail_id: int, 
-    email: str = Query(...),
+    email: str,
     db: Session = Depends(get_db)):
-    mail = db.query(Mail).filter(Mail.id == mail_id).first()
+    mail = db.query(Mail).filter(
+        Mail.id == mail_id,
+        Mail.sender == email
+    ).first()
 
     if not mail:
         raise HTTPException(status_code=404, detail="Mail not found")
-    if mail.sender != email:
-        raise HTTPException(status_code=403, detail="Mail deletion can only be done by the sender")
 
     db.delete(mail)
     db.commit()
