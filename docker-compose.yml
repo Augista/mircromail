@@ -49,6 +49,22 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+  
+  notification_db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: notification_user
+      POSTGRES_PASSWORD: notification_password
+      POSTGRES_DB: notification_db
+    ports:
+      - "5435:5432" # Port 5435 agar tidak bentrok dengan DB lain
+    volumes:
+      - notification_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U notification_user"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   # RabbitMQ Message Queue
   rabbitmq:
@@ -200,6 +216,7 @@ volumes:
   auth_db_data:
   composer_db_data:
   storage_db_data:
+  notification_db_data:
   rabbitmq_data:
   prometheus_data:
   grafana_data:

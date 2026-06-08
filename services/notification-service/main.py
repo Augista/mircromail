@@ -4,14 +4,14 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
 from prometheus_client import make_asgi_app, Counter
 from config import settings
-from rabbitmq import run_rabbitmq_consumer
-from websocket_manager import manager
+from lib.rabbitmq import run_rabbitmq_consumer
+from lib.websocket_manager import manager
 from fastapi import Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List
 from database import get_db, engine, Base
-from models import Notification
-import schemas
+from models.notification import Notification
+from schemas.notification import NotificationResponse
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -104,7 +104,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
 
 # --- REST API Endpoints ---
 
-@app.get("/api/notifications/{user_id}", response_model=List[schemas.NotificationResponse])
+@app.get("/api/notifications/{user_id}", response_model=List[NotificationResponse])
 async def get_notifications(user_id: str, db: Session = Depends(get_db)):
     """Mengambil seluruh riwayat notifikasi untuk user tertentu, diurutkan dari yang terbaru"""
     notifs = db.query(Notification).filter(Notification.user_id == user_id).order_by(Notification.created_at.desc()).all()

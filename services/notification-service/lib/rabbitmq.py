@@ -3,9 +3,9 @@ import threading
 import json
 import asyncio
 from config import settings
-from websocket_manager import manager
+from lib.websocket_manager import manager
 from database import SessionLocal
-from models import Notification
+from models.notification import Notification
 
 def process_message(ch, method, properties, body, loop):
     try:
