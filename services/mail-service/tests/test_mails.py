@@ -9,7 +9,7 @@ def test_create_mail(client):
     assert response.status_code == 201
     data = response.json()
     assert data["sender"] == "test@mail.com"
-    assert data["status"] == "pending"
+    assert data["status"] == "sent"
 
 
 def test_get_mail(client):
@@ -34,7 +34,7 @@ def test_delete_mail(client):
 
     mail_id = create.json()["id"]
 
-    response = client.delete(f"/mails/{mail_id}")
+    response = client.delete(f"/mails/{mail_id}?email=a@mail.com")
     assert response.status_code == 200
 
     get = client.get(f"/mails/{mail_id}")
