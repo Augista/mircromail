@@ -1,3 +1,4 @@
+from enum import Enum
 from sqlalchemy import Column, Integer, String, DateTime
 from database import Base
 from datetime import datetime, UTC
@@ -12,3 +13,8 @@ class Mail(Base):
     body = Column(String)
     status = Column(String, default="pending")
     created_at = Column(DateTime, default=datetime.now(UTC))
+
+class MailBox(str, Enum):
+    inbox = "inbox"
+    sent = "sent"
+    all = "all"

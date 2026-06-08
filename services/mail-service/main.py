@@ -1,11 +1,12 @@
 from typing import List
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Depends, HTTPException, Query
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from database import SessionLocal
-from models.mail import Mail
-from schemas.mail import MailCreate, MailUpdate, MailResponse
-
+from models.mail import Mail, MailBox
+from schemas.mail import MailCreate, MailResponse
+from lib.event import publish_mail_sent
 
 app = FastAPI(
     title="MicroMail Mail Service",
@@ -42,12 +43,14 @@ def create_mail(payload: MailCreate, db: Session = Depends(get_db)):
         recipient=payload.recipient,
         subject=payload.subject,
         body=payload.body,
-        status="pending"
+        status="sent"
     )
 
     db.add(mail)
     db.commit()
     db.refresh(mail)
+
+    publish_mail_sent(mail)
 
     return mail
 
@@ -55,8 +58,37 @@ def create_mail(payload: MailCreate, db: Session = Depends(get_db)):
 # GET ALL MAILS
 # --------------------
 @app.get("/mails", response_model=List[MailResponse])
-def get_mails(skip: int = 0, limit: int = 50, db: Session = Depends(get_db)):
-    return db.query(Mail).offset(skip).limit(limit).all()
+def get_mails(
+    email: str, 
+    box: MailBox, # inbox | sent | all
+    search: str = Query(None),
+    skip: int = 0, 
+    limit: int = 20, 
+    db: Session = Depends(get_db)):
+    query = db.query(Mail)
+
+    if box == "inbox":
+        query = query.filter(Mail.recipient == email)
+
+    elif box == "sent":
+        query = query.filter(Mail.sender == email)
+
+    else:
+        query = query.filter(
+            (Mail.sender == email) | (Mail.recipient == email)
+        )
+
+    if search:
+        query = query.filter(
+            or_(
+                Mail.subject.ilike(f"%{search}%"),
+                Mail.body.ilike(f"%{search}%")
+            )
+        )
+
+    query = query.order_by(Mail.id.desc())
+
+    return query.offset(skip).limit(limit).all()
 
 
 # --------------------
@@ -73,39 +105,19 @@ def get_mail(mail_id: int, db: Session = Depends(get_db)):
 
 
 # --------------------
-# UPDATE MAIL
-# --------------------
-@app.patch("/mails/{mail_id}", response_model=MailResponse)
-def update_mail(mail_id: int, payload: MailUpdate, db: Session = Depends(get_db)):
-    mail = db.query(Mail).filter(Mail.id == mail_id).first()
-
-    if not mail:
-        raise HTTPException(status_code=404, detail="Mail not found")
-
-    if payload.subject is not None:
-        mail.subject = payload.subject
-
-    if payload.body is not None:
-        mail.body = payload.body
-
-    if payload.status is not None:
-        mail.status = payload.status
-
-    db.commit()
-    db.refresh(mail)
-
-    return mail
-
-
-# --------------------
 # DELETE MAIL
 # --------------------
 @app.delete("/mails/{mail_id}")
-def delete_mail(mail_id: int, db: Session = Depends(get_db)):
+def delete_mail(
+    mail_id: int, 
+    email: str = Query(...),
+    db: Session = Depends(get_db)):
     mail = db.query(Mail).filter(Mail.id == mail_id).first()
 
     if not mail:
         raise HTTPException(status_code=404, detail="Mail not found")
+    if mail.sender != email:
+        raise HTTPException(status_code=403, detail="Mail deletion can only be done by the sender")
 
     db.delete(mail)
     db.commit()

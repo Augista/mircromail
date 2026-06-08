@@ -13,14 +13,6 @@ class MailCreate(BaseModel):
     body: Optional[str] = None
 
 # --------------------
-# UPDATE Mail
-# --------------------
-class MailUpdate(BaseModel):
-    subject: Optional[str] = None
-    body: Optional[str] = None
-    status: Optional[str] = None
-
-# --------------------
 # RESPONSE MODEL
 # --------------------
 class MailResponse(BaseModel):
