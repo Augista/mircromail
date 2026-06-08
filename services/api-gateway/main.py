@@ -1,6 +1,7 @@
-from fastapi import FastAPI, Request, HTTPException, status
+from fastapi import FastAPI, Request, HTTPException, status, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.security import HTTPAuthorizationCredentials
 import httpx
 import logging
 import os
@@ -10,7 +11,7 @@ import sys
 sys.path.insert(0, os.path.dirname(__file__))
 
 from config import settings
-from middleware.auth import JWTBearer, verify_token
+from middleware.auth import JWTBearer, verify_token, decode_token
 
 # Configure logging
 logging.basicConfig(level=settings.LOG_LEVEL)
@@ -25,14 +26,32 @@ app = FastAPI(
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[settings.FRONTEND_URL],
-    allow_credentials=True,
+    allow_origins=["*"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(_request: Request, exc: Exception):
+    logger.error(f"Unhandled exception: {exc}", exc_info=True)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal server error"},
+        headers={"Access-Control-Allow-Origin": "*"},
+    )
 # JWT Bearer authentication
 jwt_bearer = JWTBearer(auto_error=False)
+
+
+def proxy_response(response: httpx.Response) -> JSONResponse:
+    """Convert an httpx response to a JSONResponse, handling empty or non-JSON bodies."""
+    try:
+        content = response.json()
+    except Exception:
+        content = {"detail": response.text or "Upstream error"}
+    return JSONResponse(status_code=response.status_code, content=content)
 
 
 @app.get("/health")
@@ -57,10 +76,7 @@ async def register(request: Request):
                 json=body,
                 timeout=10.0
             )
-            return JSONResponse(
-                status_code=response.status_code,
-                content=response.json()
-            )
+            return proxy_response(response)
         except httpx.RequestError as e:
             logger.error(f"Auth Service error: {str(e)}")
             raise HTTPException(
@@ -80,10 +96,7 @@ async def login(request: Request):
                 json=body,
                 timeout=10.0
             )
-            return JSONResponse(
-                status_code=response.status_code,
-                content=response.json()
-            )
+            return proxy_response(response)
         except httpx.RequestError as e:
             logger.error(f"Auth Service error: {str(e)}")
             raise HTTPException(
@@ -106,10 +119,7 @@ async def get_current_user(request: Request):
                 headers={"Authorization": auth_header},
                 timeout=10.0
             )
-            return JSONResponse(
-                status_code=response.status_code,
-                content=response.json()
-            )
+            return proxy_response(response)
         except httpx.RequestError as e:
             logger.error(f"Auth Service error: {str(e)}")
             raise HTTPException(
@@ -129,10 +139,7 @@ async def refresh(request: Request):
                 json=body,
                 timeout=10.0
             )
-            return JSONResponse(
-                status_code=response.status_code,
-                content=response.json()
-            )
+            return proxy_response(response)
         except httpx.RequestError as e:
             logger.error(f"Auth Service error: {str(e)}")
             raise HTTPException(
@@ -144,7 +151,7 @@ async def refresh(request: Request):
 # ==================== DRAFTS ROUTES ====================
 
 @app.get("/api/drafts")
-async def list_drafts(request: Request, credentials = jwt_bearer):
+async def list_drafts(request: Request, credentials: HTTPAuthorizationCredentials | None = Depends(jwt_bearer)):
     """List user's drafts"""
     if not credentials:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
@@ -157,10 +164,7 @@ async def list_drafts(request: Request, credentials = jwt_bearer):
                 headers={"Authorization": f"Bearer {token}"},
                 timeout=10.0
             )
-            return JSONResponse(
-                status_code=response.status_code,
-                content=response.json()
-            )
+            return proxy_response(response)
         except httpx.RequestError as e:
             logger.error(f"Composer Service error: {str(e)}")
             raise HTTPException(
@@ -170,7 +174,7 @@ async def list_drafts(request: Request, credentials = jwt_bearer):
 
 
 @app.post("/api/drafts")
-async def create_draft(request: Request, credentials = jwt_bearer):
+async def create_draft(request: Request, credentials: HTTPAuthorizationCredentials | None = Depends(jwt_bearer)):
     """Create new draft"""
     if not credentials:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
@@ -185,10 +189,7 @@ async def create_draft(request: Request, credentials = jwt_bearer):
                 headers={"Authorization": f"Bearer {token}"},
                 timeout=10.0
             )
-            return JSONResponse(
-                status_code=response.status_code,
-                content=response.json()
-            )
+            return proxy_response(response)
         except httpx.RequestError as e:
             logger.error(f"Composer Service error: {str(e)}")
             raise HTTPException(
@@ -198,7 +199,7 @@ async def create_draft(request: Request, credentials = jwt_bearer):
 
 
 @app.put("/api/drafts/{draft_id}")
-async def update_draft(draft_id: str, request: Request, credentials = jwt_bearer):
+async def update_draft(draft_id: str, request: Request, credentials: HTTPAuthorizationCredentials | None = Depends(jwt_bearer)):
     """Update draft"""
     if not credentials:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
@@ -213,10 +214,7 @@ async def update_draft(draft_id: str, request: Request, credentials = jwt_bearer
                 headers={"Authorization": f"Bearer {token}"},
                 timeout=10.0
             )
-            return JSONResponse(
-                status_code=response.status_code,
-                content=response.json()
-            )
+            return proxy_response(response)
         except httpx.RequestError as e:
             logger.error(f"Composer Service error: {str(e)}")
             raise HTTPException(
@@ -226,7 +224,7 @@ async def update_draft(draft_id: str, request: Request, credentials = jwt_bearer
 
 
 @app.delete("/api/drafts/{draft_id}")
-async def delete_draft(draft_id: str, request: Request, credentials = jwt_bearer):
+async def delete_draft(draft_id: str, request: Request, credentials: HTTPAuthorizationCredentials | None = Depends(jwt_bearer)):
     """Delete draft"""
     if not credentials:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
@@ -239,10 +237,7 @@ async def delete_draft(draft_id: str, request: Request, credentials = jwt_bearer
                 headers={"Authorization": f"Bearer {token}"},
                 timeout=10.0
             )
-            return JSONResponse(
-                status_code=response.status_code,
-                content=response.json()
-            )
+            return proxy_response(response)
         except httpx.RequestError as e:
             logger.error(f"Composer Service error: {str(e)}")
             raise HTTPException(
@@ -252,7 +247,7 @@ async def delete_draft(draft_id: str, request: Request, credentials = jwt_bearer
 
 
 @app.post("/api/drafts/{draft_id}/send")
-async def send_draft(draft_id: str, request: Request, credentials = jwt_bearer):
+async def send_draft(draft_id: str, request: Request, credentials: HTTPAuthorizationCredentials | None = Depends(jwt_bearer)):
     """Send draft (publishes email.send event)"""
     if not credentials:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
@@ -265,10 +260,7 @@ async def send_draft(draft_id: str, request: Request, credentials = jwt_bearer):
                 headers={"Authorization": f"Bearer {token}"},
                 timeout=10.0
             )
-            return JSONResponse(
-                status_code=response.status_code,
-                content=response.json()
-            )
+            return proxy_response(response)
         except httpx.RequestError as e:
             logger.error(f"Composer Service error: {str(e)}")
             raise HTTPException(
@@ -280,163 +272,179 @@ async def send_draft(draft_id: str, request: Request, credentials = jwt_bearer):
 # ==================== EMAIL ROUTES ====================
 
 @app.get("/api/inbox")
-async def get_inbox(request: Request, credentials = jwt_bearer, skip: int = 0, limit: int = 50):
-    """Get user's inbox emails"""
+async def get_inbox(request: Request, credentials: HTTPAuthorizationCredentials | None = Depends(jwt_bearer), skip: int = 0, limit: int = 50):
+    """Get user's inbox emails - forward to Mail Service"""
     if not credentials:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
-    
+
     token = credentials.credentials
+    payload = decode_token(token)
+    user_email = payload.get("email") if payload else None
+    if not user_email:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+
     async with httpx.AsyncClient() as client:
         try:
             response = await client.get(
-                f"{settings.STORAGE_SERVICE_URL}/emails/inbox",
-                headers={"Authorization": f"Bearer {token}"},
-                params={"skip": skip, "limit": limit},
+                f"{settings.MAIL_SERVICE_URL}/mails",
+                params={"email": user_email, "box": "inbox", "skip": skip, "limit": limit},
                 timeout=10.0
             )
-            return JSONResponse(
-                status_code=response.status_code,
-                content=response.json()
-            )
+            return proxy_response(response)
         except httpx.RequestError as e:
-            logger.error(f"Storage Service error: {str(e)}")
+            logger.error(f"Mail Service error: {str(e)}")
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Storage Service unavailable"
+                detail="Mail Service unavailable"
             )
 
 
 @app.get("/api/sent")
-async def get_sent(request: Request, credentials = jwt_bearer, skip: int = 0, limit: int = 50):
-    """Get user's sent emails"""
+async def get_sent(request: Request, credentials: HTTPAuthorizationCredentials | None = Depends(jwt_bearer), skip: int = 0, limit: int = 50):
+    """Get user's sent emails - forward to Mail Service"""
     if not credentials:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
-    
+
     token = credentials.credentials
+    payload = decode_token(token)
+    user_email = payload.get("email") if payload else None
+    if not user_email:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+
     async with httpx.AsyncClient() as client:
         try:
             response = await client.get(
-                f"{settings.STORAGE_SERVICE_URL}/emails/sent",
-                headers={"Authorization": f"Bearer {token}"},
-                params={"skip": skip, "limit": limit},
+                f"{settings.MAIL_SERVICE_URL}/mails",
+                params={"email": user_email, "box": "sent", "skip": skip, "limit": limit},
                 timeout=10.0
             )
-            return JSONResponse(
-                status_code=response.status_code,
-                content=response.json()
-            )
+            return proxy_response(response)
         except httpx.RequestError as e:
-            logger.error(f"Storage Service error: {str(e)}")
+            logger.error(f"Mail Service error: {str(e)}")
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Storage Service unavailable"
+                detail="Mail Service unavailable"
             )
 
 
-@app.get("/api/emails/{email_id}")
-async def get_email(email_id: str, request: Request, credentials = jwt_bearer):
-    """Get email details"""
+# ==================== MAIL ROUTES ====================
+
+@app.get("/api/mails")
+async def list_mails(
+    request: Request,
+    credentials: HTTPAuthorizationCredentials | None = Depends(jwt_bearer),
+    box: str = "inbox",
+    search: str = None,
+    skip: int = 0,
+    limit: int = 20
+):
+    """List mails by box - forward to Mail Service"""
     if not credentials:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
-    
+
     token = credentials.credentials
+    payload = decode_token(token)
+    user_email = payload.get("email") if payload else None
+    if not user_email:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+
+    params = {"email": user_email, "box": box, "skip": skip, "limit": limit}
+    if search:
+        params["search"] = search
+
     async with httpx.AsyncClient() as client:
         try:
             response = await client.get(
-                f"{settings.STORAGE_SERVICE_URL}/emails/{email_id}",
-                headers={"Authorization": f"Bearer {token}"},
+                f"{settings.MAIL_SERVICE_URL}/mails",
+                params=params,
                 timeout=10.0
             )
-            return JSONResponse(
-                status_code=response.status_code,
-                content=response.json()
-            )
+            return proxy_response(response)
         except httpx.RequestError as e:
-            logger.error(f"Storage Service error: {str(e)}")
+            logger.error(f"Mail Service error: {str(e)}")
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Storage Service unavailable"
+                detail="Mail Service unavailable"
             )
 
 
-@app.get("/api/emails/search")
-async def search_emails(request: Request, credentials = jwt_bearer, query: str = ""):
-    """Search emails"""
+@app.post("/api/mails")
+async def create_mail(request: Request, credentials: HTTPAuthorizationCredentials | None = Depends(jwt_bearer)):
+    """Send a mail - forward to Mail Service with sender from JWT"""
     if not credentials:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
-    
-    token = credentials.credentials
-    async with httpx.AsyncClient() as client:
-        try:
-            response = await client.get(
-                f"{settings.STORAGE_SERVICE_URL}/emails/search",
-                headers={"Authorization": f"Bearer {token}"},
-                params={"query": query},
-                timeout=10.0
-            )
-            return JSONResponse(
-                status_code=response.status_code,
-                content=response.json()
-            )
-        except httpx.RequestError as e:
-            logger.error(f"Storage Service error: {str(e)}")
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Storage Service unavailable"
-            )
 
-
-@app.post("/api/emails/{email_id}/mark-read")
-async def mark_email_read(email_id: str, request: Request, credentials = jwt_bearer):
-    """Mark email as read"""
-    if not credentials:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
-    
     token = credentials.credentials
+    payload = decode_token(token)
+    user_email = payload.get("email") if payload else None
+    if not user_email:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+
     body = await request.json()
+    body["sender"] = user_email
+
     async with httpx.AsyncClient() as client:
         try:
             response = await client.post(
-                f"{settings.STORAGE_SERVICE_URL}/emails/{email_id}/mark-read",
+                f"{settings.MAIL_SERVICE_URL}/mails",
                 json=body,
-                headers={"Authorization": f"Bearer {token}"},
                 timeout=10.0
             )
-            return JSONResponse(
-                status_code=response.status_code,
-                content=response.json()
-            )
+            return proxy_response(response)
         except httpx.RequestError as e:
-            logger.error(f"Storage Service error: {str(e)}")
+            logger.error(f"Mail Service error: {str(e)}")
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Storage Service unavailable"
+                detail="Mail Service unavailable"
             )
 
 
-@app.delete("/api/emails/{email_id}")
-async def delete_email(email_id: str, request: Request, credentials = jwt_bearer):
-    """Delete/archive email"""
+@app.get("/api/mails/{mail_id}")
+async def get_mail(mail_id: int, request: Request, credentials: HTTPAuthorizationCredentials | None = Depends(jwt_bearer)):
+    """Get specific mail - forward to Mail Service"""
     if not credentials:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
-    
+
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.get(
+                f"{settings.MAIL_SERVICE_URL}/mails/{mail_id}",
+                timeout=10.0
+            )
+            return proxy_response(response)
+        except httpx.RequestError as e:
+            logger.error(f"Mail Service error: {str(e)}")
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Mail Service unavailable"
+            )
+
+
+@app.delete("/api/mails/{mail_id}")
+async def delete_mail(mail_id: int, request: Request, credentials: HTTPAuthorizationCredentials | None = Depends(jwt_bearer)):
+    """Delete mail - forward to Mail Service"""
+    if not credentials:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
+
     token = credentials.credentials
+    payload = decode_token(token)
+    user_email = payload.get("email") if payload else None
+    if not user_email:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+
     async with httpx.AsyncClient() as client:
         try:
             response = await client.delete(
-                f"{settings.STORAGE_SERVICE_URL}/emails/{email_id}",
-                headers={"Authorization": f"Bearer {token}"},
+                f"{settings.MAIL_SERVICE_URL}/mails/{mail_id}",
+                params={"email": user_email},
                 timeout=10.0
             )
-            return JSONResponse(
-                status_code=response.status_code,
-                content=response.json()
-            )
+            return proxy_response(response)
         except httpx.RequestError as e:
-            logger.error(f"Storage Service error: {str(e)}")
+            logger.error(f"Mail Service error: {str(e)}")
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Storage Service unavailable"
+                detail="Mail Service unavailable"
             )
 
 

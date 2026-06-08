@@ -1,0 +1,49 @@
+services:
+  rabbitmq:
+    image: rabbitmq:4.3.1-management-alpine
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  mail-db:
+    image: postgres:18.4-alpine
+    environment:
+      POSTGRES_DB: mail_db
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: secret
+    volumes:
+      - mail_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d mail_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  mail-service:
+    build: ./mail-service
+    ports:
+      - "8004:8004"
+    environment:
+      DATABASE_URL: postgresql+psycopg2://admin:secret@mail-db:5432/mail_db
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+      MAIL_SERVICE_PORT: 8004
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8004/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    depends_on:
+      mail-db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  mail_data:

@@ -15,15 +15,30 @@ const folders = [
   { icon: Trash2, label: 'Trash', href: '/mail/trash', count: 0 },
 ]
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+
 export default function MailSidebar() {
   const pathname = usePathname()
   const [isComposerOpen, setIsComposerOpen] = useState(false)
 
   const handleSendEmail = async (email: { to: string; subject: string; body: string }) => {
-    // TODO: Integrate with Composer Service API
-    console.log('Sending email:', email)
-    // await draftsAPI.create(email)
-    // await draftsAPI.send(draftId)
+    const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
+    const response = await fetch(`${API_URL}/api/mails`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({
+        recipient: email.to,
+        subject: email.subject,
+        body: email.body,
+      }),
+    })
+    if (!response.ok) {
+      const data = await response.json()
+      throw new Error(data.detail || 'Failed to send email')
+    }
   }
 
   return (

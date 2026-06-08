@@ -1,6 +1,6 @@
 import jwt
 from fastapi import Request, HTTPException, status
-from fastapi.security import HTTPBearer, HTTPAuthCredentials
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from functools import wraps
 from typing import Optional, Dict, Any
 from config import settings
@@ -44,7 +44,7 @@ class JWTBearer(HTTPBearer):
     def __init__(self, auto_error: bool = True):
         super().__init__(auto_error=auto_error)
     
-    async def __call__(self, request: Request) -> Optional[HTTPAuthCredentials]:
+    async def __call__(self, request: Request) -> Optional[HTTPAuthorizationCredentials]:
         credentials = await super().__call__(request)
         if credentials:
             if not credentials.scheme == "Bearer":

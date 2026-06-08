@@ -83,6 +83,39 @@ services:
       timeout: 5s
       retries: 5
 
+  # Mail Database
+  mail_db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: mail_user
+      POSTGRES_PASSWORD: mail_password
+      POSTGRES_DB: mail_db
+    ports:
+      - "5435:5432"
+    volumes:
+      - mail_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mail_user"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Mail Service
+  mail_service:
+    build:
+      context: ./services/mail-service
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgresql+psycopg2://mail_user:mail_password@mail_db:5432/mail_db
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+    ports:
+      - "8004:8004"
+    depends_on:
+      mail_db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
   # API Gateway
   api_gateway:
     build:
@@ -90,17 +123,14 @@ services:
       dockerfile: Dockerfile
     environment:
       AUTH_SERVICE_URL: http://auth_service:8001
-      COMPOSER_SERVICE_URL: http://composer_service:8002
-      STORAGE_SERVICE_URL: http://storage_service:8003
-      DELIVERY_SERVICE_URL: http://delivery_service:8004
-      SECRET_KEY: your-secret-key-change-in-production
+      MAIL_SERVICE_URL: http://mail_service:8004
+      JWT_SECRET: your-secret-key-change-in-production
+      FRONTEND_URL: http://localhost:3000
     ports:
       - "8000:8000"
     depends_on:
       - auth_service
-      - composer_service
-      - storage_service
-      - delivery_service
+      - mail_service
 
   # Auth Service
   auth_service:
@@ -217,6 +247,7 @@ volumes:
   auth_db_data:
   composer_db_data:
   storage_db_data:
+  mail_db_data:
   notification_db_data:
   rabbitmq_data:
   prometheus_data:
