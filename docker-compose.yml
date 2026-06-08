@@ -70,7 +70,7 @@ services:
   # API Gateway
   api_gateway:
     build:
-      context: ./services/gateway
+      context: ./services/api-gateway
       dockerfile: Dockerfile
     environment:
       AUTH_SERVICE_URL: http://auth_service:8001
@@ -89,11 +89,11 @@ services:
   # Auth Service
   auth_service:
     build:
-      context: ./services/auth
+      context: ./services/auth-service
       dockerfile: Dockerfile
     environment:
-      DATABASE_URL: postgresql://auth_user:auth_password@auth_db:5432/auth_db
-      SECRET_KEY: your-secret-key-change-in-production
+      AUTH_DB_URL: postgresql://auth_user:auth_password@auth_db:5432/auth_db
+      JWT_SECRET: your-secret-key-change-in-production
       RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
     ports:
       - "8001:8001"
@@ -106,7 +106,7 @@ services:
   # Mail Composer Service
   composer_service:
     build:
-      context: ./services/composer
+      context: ./services/composer-service
       dockerfile: Dockerfile
     environment:
       DATABASE_URL: postgresql://composer_user:composer_password@composer_db:5432/composer_db
@@ -122,7 +122,7 @@ services:
   # Mail Storage Service
   storage_service:
     build:
-      context: ./services/storage
+      context: ./services/storage-service
       dockerfile: Dockerfile
     environment:
       DATABASE_URL: postgresql://storage_user:storage_password@storage_db:5432/storage_db
@@ -138,7 +138,7 @@ services:
   # Mail Delivery Service
   delivery_service:
     build:
-      context: ./services/delivery
+      context: ./services/delivery-service
       dockerfile: Dockerfile
     environment:
       RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
@@ -152,11 +152,43 @@ services:
       rabbitmq:
         condition: service_healthy
 
+  # Prometheus
+  prometheus:
+    image: prom/prometheus:v2.51.0
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.console.libraries=/etc/prometheus/console_libraries"
+      - "--web.console.templates=/etc/prometheus/consoles"
+    ports:
+      - "9090:9090"
+
+  # Grafana
+  grafana:
+    image: grafana/grafana:10.4.0
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "3001:3000"
+    depends_on:
+      - prometheus
+
 volumes:
   auth_db_data:
   composer_db_data:
   storage_db_data:
   rabbitmq_data:
+  prometheus_data:
+  grafana_data:
 
 networks:
   default:

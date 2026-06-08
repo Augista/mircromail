@@ -1,6 +1,7 @@
 from fastapi import FastAPI, HTTPException, Request, status
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session
+from prometheus_fastapi_instrumentator import Instrumentator
 import logging
 import sys
 import os
@@ -41,6 +42,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+Instrumentator().instrument(app).expose(app)
 
 # Database setup
 engine = create_engine(settings.AUTH_DB_URL, echo=settings.DEBUG)
