@@ -6,9 +6,24 @@ from prometheus_client import make_asgi_app, Counter
 from config import settings
 from rabbitmq import run_rabbitmq_consumer
 from websocket_manager import manager
+from fastapi import Depends, HTTPException
+from sqlalchemy.orm import Session
+from typing import List
+from database import get_db, engine, Base
+from models import Notification
+import schemas
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    print("Mengecek dan membuat tabel database...")
+    Base.metadata.create_all(bind=engine)
+    
+    loop = asyncio.get_running_loop()
+    print("Menyiapkan Notification Service...")
+    run_rabbitmq_consumer(loop)
+    yield
+    print("Mematikan Notification Service...")
+
     # Menangkap event loop async dari FastAPI untuk dikirim ke RabbitMQ
     loop = asyncio.get_running_loop()
     print("Menyiapkan Notification Service...")
@@ -86,3 +101,21 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
             data = await websocket.receive_text()
     except WebSocketDisconnect:
         manager.disconnect(user_id)
+
+# --- REST API Endpoints ---
+
+@app.get("/api/notifications/{user_id}", response_model=List[schemas.NotificationResponse])
+async def get_notifications(user_id: str, db: Session = Depends(get_db)):
+    """Mengambil seluruh riwayat notifikasi untuk user tertentu, diurutkan dari yang terbaru"""
+    notifs = db.query(Notification).filter(Notification.user_id == user_id).order_by(Notification.created_at.desc()).all()
+    return notifs
+
+@app.put("/api/notifications/{notification_id}/read")
+async def mark_as_read(notification_id: int, db: Session = Depends(get_db)):
+    """Menandai satu notifikasi sebagai 'sudah dibaca'"""
+    notif = db.query(Notification).filter(Notification.id == notification_id).first()
+    if notif:
+        notif.is_read = True
+        db.commit()
+        return {"status": "success", "message": "Notifikasi ditandai sudah dibaca"}
+    raise HTTPException(status_code=404, detail="Notifikasi tidak ditemukan")
