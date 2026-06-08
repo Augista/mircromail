@@ -175,6 +175,7 @@ services:
       dockerfile: Dockerfile
     environment:
       RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+      DATABASE_URL: postgresql://notification_user:notification_password@notification_db:5432/notification_db
       PORT: 8005
     ports:
       - "8005:8005"
