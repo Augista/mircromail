@@ -8,6 +8,8 @@ from models.mail import Mail, MailBox
 from schemas.mail import MailCreate, MailResponse
 from lib.event import publish_mail_sent
 
+from config import settings
+
 app = FastAPI(
     title="MicroMail Mail Service",
     description="Mail service responsible for delivering and managing mails",
@@ -124,3 +126,12 @@ def delete_mail(
     db.commit()
 
     return {"message": "Mail deleted successfully"}
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(
+        app,
+        host="0.0.0.0",
+        port=settings.MAIL_SERVICE_PORT,
+        log_level=settings.LOG_LEVEL.lower()
+    )
