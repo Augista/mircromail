@@ -4,3 +4,5 @@ venv
 !.env.example
 
 __pycache__
+
+test.db

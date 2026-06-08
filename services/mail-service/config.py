@@ -2,7 +2,7 @@ from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
-    DELIVERY_SERVICE_PORT: int = 8004
+    MAIL_SERVICE_PORT: int = 8004
     DEBUG: bool = False
     LOG_LEVEL: str = "INFO"
 
