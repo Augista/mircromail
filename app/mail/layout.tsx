@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import MailSidebar from '@/components/mail/mail-sidebar'
 import MailHeader from '@/components/mail/mail-header'
+import { MailProvider } from './mail-provider'
 
 export const metadata: Metadata = {
   title: 'MicroMail - Inbox',
@@ -13,6 +14,7 @@ export default function MailLayout({
   children: React.ReactNode
 }) {
   return (
+    <MailProvider>
     <div className="flex h-screen bg-background">
       <MailSidebar />
       <div className="flex-1 flex flex-col">
@@ -22,5 +24,6 @@ export default function MailLayout({
         </main>
       </div>
     </div>
+    </MailProvider>
   )
 }

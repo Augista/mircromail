@@ -9,10 +9,8 @@ import { cn } from '@/lib/utils'
 import MailComposer from './mail-composer'
 
 const folders = [
-  { icon: Inbox, label: 'Inbox', href: '/mail/inbox', count: 12 },
-  { icon: Send, label: 'Sent', href: '/mail/sent', count: 5 },
-  { icon: FileText, label: 'Drafts', href: '/mail/drafts', count: 2 },
-  { icon: Trash2, label: 'Trash', href: '/mail/trash', count: 0 },
+  { icon: Inbox, label: 'Inbox', href: '/mail/inbox'},
+  { icon: Send, label: 'Sent', href: '/mail/sent'},
 ]
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
@@ -76,7 +74,7 @@ export default function MailSidebar() {
               >
                 <Icon className="w-5 h-5 flex-shrink-0" />
                 <span className="flex-1 text-left">{folder.label}</span>
-                {folder.count > 0 && (
+                {/* {folder.count > 0 && (
                   <span className={cn(
                     'px-2 py-0.5 rounded-full text-xs font-semibold',
                     isActive
@@ -85,14 +83,14 @@ export default function MailSidebar() {
                   )}>
                     {folder.count}
                   </span>
-                )}
+                )} */}
               </button>
             </Link>
           )
         })}
       </div>
 
-      <div className="pt-4 border-t border-border space-y-2">
+      {/* <div className="pt-4 border-t border-border space-y-2">
         <p className="text-xs font-semibold text-muted-foreground px-4">LABELS</p>
         <div className="space-y-1">
           {['Work', 'Personal', 'Important'].map((label) => (
@@ -104,7 +102,7 @@ export default function MailSidebar() {
             </button>
           ))}
         </div>
-      </div>
+      </div> */}
 
       <MailComposer
         isOpen={isComposerOpen}
