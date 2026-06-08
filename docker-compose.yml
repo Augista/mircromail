@@ -152,6 +152,20 @@ services:
       rabbitmq:
         condition: service_healthy
 
+  # Notification Service
+  notification_service:
+    build:
+      context: ./services/notification-service
+      dockerfile: Dockerfile
+    environment:
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+      PORT: 8005
+    ports:
+      - "8005:8005"
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+
   # Prometheus
   prometheus:
     image: prom/prometheus:v2.51.0
