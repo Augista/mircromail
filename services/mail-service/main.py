@@ -2,7 +2,7 @@ from typing import List
 from fastapi import FastAPI, Depends, HTTPException, Query
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
-
+from fastapi.middleware.cors import CORSMiddleware
 from database import SessionLocal
 from models.mail import Mail, MailBox
 from schemas.mail import MailCreate, MailResponse
@@ -15,7 +15,16 @@ app = FastAPI(
     description="Mail service responsible for delivering and managing mails",
     version="1.0.0"
 )
+origins = [  "http://localhost",
+    "http://localhost:3000",]
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 # --------------------
 # DB DEPENDENCY
 # --------------------

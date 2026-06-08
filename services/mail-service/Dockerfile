@@ -13,5 +13,5 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application
 COPY . .
 
-# Run application
-CMD ["python", "main.py"]
+# Run migrations then start
+CMD ["sh", "-c", "alembic upgrade head && python main.py"]

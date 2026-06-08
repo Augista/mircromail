@@ -33,14 +33,83 @@ A full-featured webmail platform built with microservices architecture, featurin
 │   ├── auth/                    # Authentication Service
 │   │   ├── main.py
 │   │   └── Dockerfile
-│   ├── composer/                # Mail Composer Service (placeholder)
-│   ├── storage/                 # Mail Storage Service (placeholder)
-│   ├── delivery/                # Mail Delivery Service (placeholder)
-│   └── requirements.txt
+│   ├── mail-service/                # Mail Composer Service (placeholder)
+
 ├── docker-compose.yml           # Local development setup
 ├── .env.example                 # Environment variables
 └── README.md
 
+```
+
+```
+Cara 1: Docker Compose (Recommended)
+Ini cara paling mudah — semua service jalan otomatis.
+
+Step 1 — Pastikan Docker Desktop sudah running, lalu dari root project:
+
+
+docker-compose up --build
+Ini akan menyalakan:
+
+auth_db (PostgreSQL :5432)
+mail_db (PostgreSQL :5435)
+rabbitmq (:5672)
+auth_service (:8001)
+mail_service (:8004)
+api_gateway (:8000)
+prometheus + grafana (monitoring)
+Migrasi database berjalan otomatis karena Dockerfile sudah diupdate.
+
+Step 2 — Jalankan frontend di terminal terpisah:
+
+
+npm install
+npm run dev
+Step 3 — Buka browser:
+
+
+http://localhost:3000
+Cara 2: Local (Tanpa Docker)
+Butuh PostgreSQL dan RabbitMQ sudah berjalan di localhost.
+
+Terminal 1 — Auth Service:
+
+
+cd services/auth-service
+# .env sudah ada, tapi JWT_SECRET-nya "super-secret-key"
+alembic upgrade head
+python main.py
+Terminal 2 — Mail Service:
+
+
+cd services/mail-service
+# Buat .env dari .env.example dulu:
+copy .env.example .env
+# Edit DATABASE_URL dan RABBITMQ_URL di .env itu
+alembic upgrade head
+python main.py
+Terminal 3 — API Gateway:
+
+
+cd services/api-gateway
+# Buat .env baru:
+# JWT_SECRET=super-secret-key   ← HARUS sama dengan auth-service!
+# AUTH_SERVICE_URL=http://localhost:8001
+# MAIL_SERVICE_URL=http://localhost:8004
+python main.py
+Terminal 4 — Frontend:
+
+
+# dari root project
+npm install
+npm run dev
+Catatan Penting
+Docker Compose	Local
+JWT_SECRET	Otomatis sama (your-secret-key-change-in-production)	Harus disamakan manual
+Database	Auto-create via docker	PostgreSQL harus sudah jalan
+RabbitMQ	Auto via docker	Harus install + jalankan sendiri
+Migrasi	Otomatis (Dockerfile diupdate)	Jalankan alembic upgrade head manual
+File .env di root sudah benar — NEXT_PUBLIC_API_URL=http://localhost:8000
 ```
 
 ## Architecture

@@ -1,5 +1,5 @@
 const API_URL =
-  process.env.NEXT_PUBLIC_AUTH_API_URL || 'http://localhost:8001'
+  (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000') + '/api/auth'
 
 export interface User {
   id: string

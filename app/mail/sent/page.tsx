@@ -1,36 +1,64 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
+import useSWR from 'swr'
 import MailListView from '@/components/mail/mail-list-view'
 import MailDetailView from '@/components/mail/mail-detail-view'
 
-// Mock data
-const mockEmails = [
-  {
-    id: '1',
-    from: 'you@example.com',
-    fromName: 'You',
-    subject: 'Re: Project Update',
-    preview: 'Thanks for the update...',
-    body: 'Thanks for the update. I will review the documents and get back to you.',
-    timestamp: new Date(Date.now() - 1 * 60 * 60 * 1000),
-    read: true,
-  },
-  {
-    id: '2',
-    from: 'you@example.com',
-    fromName: 'You',
-    subject: 'Meeting Notes',
-    preview: 'Here are the notes from today...',
-    body: 'Here are the notes from todays meeting. Please review and provide feedback.',
-    timestamp: new Date(Date.now() - 3 * 60 * 60 * 1000),
-    read: true,
-  },
-]
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+
+const fetcher = (url: string) => {
+  const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
+  return fetch(url, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  }).then(res => res.json())
+}
+
+interface MailServiceEmail {
+  id: number
+  sender: string
+  recipient: string
+  subject: string
+  body: string
+  status: string
+  created_at: string
+}
+
+interface UIEmail {
+  id: string
+  from: string
+  fromName: string
+  to: string
+  subject: string
+  body: string
+  preview: string
+  read: boolean
+  isDraft: boolean
+  createdAt: string
+  timestamp: Date
+}
 
 export default function SentPage() {
   const [selectedEmailId, setSelectedEmailId] = useState<string | null>(null)
-  const [emails, setEmails] = useState(mockEmails)
+
+  const { data: rawEmails, mutate } = useSWR(`${API_URL}/api/mails?box=sent`, fetcher)
+
+  const emails: UIEmail[] = useMemo(() => {
+    if (!Array.isArray(rawEmails)) return []
+    return rawEmails.map((email: MailServiceEmail) => ({
+      id: String(email.id),
+      from: email.sender,
+      fromName: email.sender.split('@')[0],
+      to: email.recipient,
+      subject: email.subject,
+      body: email.body,
+      preview: email.body.length > 80 ? email.body.substring(0, 80) + '...' : email.body,
+      read: true,
+      isDraft: false,
+      createdAt: email.created_at,
+      timestamp: new Date(email.created_at),
+    }))
+  }, [rawEmails])
 
   const selectedEmail = emails.find(email => email.id === selectedEmailId)
 
@@ -38,9 +66,18 @@ export default function SentPage() {
     setSelectedEmailId(emailId)
   }
 
-  const handleDeleteEmail = (emailId: string) => {
-    setEmails(emails.filter(email => email.id !== emailId))
-    setSelectedEmailId(null)
+  const handleDeleteEmail = async (emailId: string) => {
+    try {
+      const token = localStorage.getItem('auth_token')
+      await fetch(`${API_URL}/api/mails/${emailId}`, {
+        method: 'DELETE',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      })
+      mutate(rawEmails?.filter((email: MailServiceEmail) => String(email.id) !== emailId))
+      setSelectedEmailId(null)
+    } catch (error) {
+      console.error('Error deleting email:', error)
+    }
   }
 
   return (

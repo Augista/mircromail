@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     
     # Service URLs
     AUTH_SERVICE_URL: str = os.getenv("AUTH_SERVICE_URL", "http://localhost:8001")
+    MAIL_SERVICE_URL: str = os.getenv("MAIL_SERVICE_URL", "http://localhost:8004")
     COMPOSER_SERVICE_URL: str = os.getenv("COMPOSER_SERVICE_URL", "http://localhost:8002")
     STORAGE_SERVICE_URL: str = os.getenv("STORAGE_SERVICE_URL", "http://localhost:8003")
     DELIVERY_SERVICE_URL: str = os.getenv("DELIVERY_SERVICE_URL", "http://localhost:8004")
