@@ -16,7 +16,7 @@
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
         {
-          "expr": "sum by (job) (rate(http_requests_total[1m]))",
+          "expr": "sum by (job) (rate(http_request_duration_seconds_count[1m]))",
           "legendFormat": "{{job}}",
           "refId": "A"
         }
@@ -36,7 +36,7 @@
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
         {
-          "expr": "sum by (job) (rate(http_requests_total{status_code=~\"5..\"}[1m]))",
+          "expr": "sum by (job) (rate(http_requests_total{status=~\"5..\"}[1m]))",
           "legendFormat": "{{job}} errors",
           "refId": "A"
         }
@@ -97,7 +97,7 @@
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
         {
-          "expr": "sum(increase(http_requests_total[1h]))",
+          "expr": "sum(increase(http_request_duration_seconds_count[1h]))",
           "refId": "A"
         }
       ],
@@ -113,7 +113,7 @@
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
         {
-          "expr": "sum(increase(http_requests_total{status_code=~\"5..\"}[1h]))",
+          "expr": "sum(increase(http_requests_total{status=~\"5..\"}[1h]))",
           "refId": "A"
         }
       ],
@@ -151,7 +151,7 @@
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
         {
-          "expr": "100 * sum(rate(http_requests_total{status_code=~\"5..\"}[5m])) / sum(rate(http_requests_total[5m]))",
+          "expr": "100 * sum(rate(http_requests_total{status=~\"5..\"}[5m])) / sum(rate(http_requests_total[5m]))",
           "refId": "A"
         }
       ],

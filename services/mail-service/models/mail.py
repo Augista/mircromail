@@ -12,6 +12,7 @@ class Mail(Base):
     subject = Column(String)
     body = Column(String)
     status = Column(String, default="pending")
+    reply_to_id = Column(Integer, nullable=True)
     created_at = Column(DateTime, default=datetime.now(UTC))
 
 class MailBox(str, Enum):

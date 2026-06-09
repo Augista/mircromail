@@ -21,6 +21,7 @@ class TestSendMail:
         assert body["subject"] == "E2E Test Mail"
         assert body["status"] == "sent"
         assert "id" in body
+        assert body["reply_to_id"] is None
 
     def test_send_mail_no_auth_returns_401(self, http):
         r = http.post("/api/mails", json={
@@ -56,6 +57,12 @@ class TestGetMail:
         assert r.status_code == 200
         assert r.json()["id"] == mail_id
 
+    def test_get_mail_response_has_reply_to_id_field(self, http, sender_token, sent_mail):
+        mail_id = sent_mail["id"]
+        r = http.get(f"/api/mails/{mail_id}", headers=auth_headers(sender_token))
+        assert r.status_code == 200
+        assert "reply_to_id" in r.json()
+
     def test_get_nonexistent_mail_returns_404(self, http, sender_token):
         r = http.get("/api/mails/999999", headers=auth_headers(sender_token))
         assert r.status_code == 404
@@ -63,6 +70,96 @@ class TestGetMail:
     def test_get_mail_no_auth_returns_401(self, http, sent_mail):
         r = http.get(f"/api/mails/{sent_mail['id']}")
         assert r.status_code == 401
+
+
+class TestReplyMail:
+    @pytest.fixture(scope="class")
+    def original_mail(self, http, sender_token):
+        """Sender sends an original mail to receiver."""
+        r = http.post("/api/mails", headers=auth_headers(sender_token), json={
+            "recipient": RECEIVER_EMAIL,
+            "subject": "Original Thread",
+            "body": "This is the original message.",
+        })
+        assert r.status_code == 201
+        return r.json()
+
+    def test_reply_mail_success(self, http, receiver_token, original_mail):
+        original_id = original_mail["id"]
+        r = http.post("/api/mails", headers=auth_headers(receiver_token), json={
+            "recipient": SENDER_EMAIL,
+            "subject": "Re: Original Thread",
+            "body": "This is the reply.",
+            "reply_to_id": original_id,
+        })
+        assert r.status_code == 201
+        data = r.json()
+        assert data["reply_to_id"] == original_id
+        assert data["sender"] == RECEIVER_EMAIL
+        assert data["recipient"] == SENDER_EMAIL
+        assert data["subject"] == "Re: Original Thread"
+        assert data["status"] == "sent"
+
+    def test_reply_appears_in_sender_inbox(self, http, sender_token, original_mail):
+        """Sender should see the reply in their inbox."""
+        original_id = original_mail["id"]
+        # Send a fresh reply so we know it's definitely there
+        http.post("/api/mails", headers=auth_headers(sender_token), json={
+            "recipient": SENDER_EMAIL,
+            "subject": "Re: Original Thread",
+            "body": "Inbox check reply",
+            "reply_to_id": original_id,
+        })
+        r = http.get("/api/mails", headers=auth_headers(sender_token),
+                     params={"box": "inbox"})
+        assert r.status_code == 200
+        mails = r.json()
+        assert any(m["subject"] == "Re: Original Thread" for m in mails)
+
+    def test_reply_no_auth_returns_401(self, http, original_mail):
+        r = http.post("/api/mails", json={
+            "recipient": SENDER_EMAIL,
+            "subject": "Re: Original Thread",
+            "body": "Should fail",
+            "reply_to_id": original_mail["id"],
+        })
+        assert r.status_code == 401
+
+    def test_reply_to_id_is_returned_by_get(self, http, sender_token, receiver_token, original_mail):
+        original_id = original_mail["id"]
+        reply = http.post("/api/mails", headers=auth_headers(receiver_token), json={
+            "recipient": SENDER_EMAIL,
+            "subject": "Re: Original Thread",
+            "body": "Check get endpoint",
+            "reply_to_id": original_id,
+        })
+        reply_id = reply.json()["id"]
+
+        fetched = http.get(f"/api/mails/{reply_id}", headers=auth_headers(sender_token))
+        assert fetched.status_code == 200
+        assert fetched.json()["reply_to_id"] == original_id
+
+    def test_reply_chain(self, http, sender_token, receiver_token, original_mail):
+        """Reply to a reply — verify nested reply_to_id is stored correctly."""
+        original_id = original_mail["id"]
+
+        first_reply = http.post("/api/mails", headers=auth_headers(receiver_token), json={
+            "recipient": SENDER_EMAIL,
+            "subject": "Re: Original Thread",
+            "body": "First reply",
+            "reply_to_id": original_id,
+        })
+        assert first_reply.status_code == 201
+        first_reply_id = first_reply.json()["id"]
+
+        second_reply = http.post("/api/mails", headers=auth_headers(sender_token), json={
+            "recipient": RECEIVER_EMAIL,
+            "subject": "Re: Original Thread",
+            "body": "Second reply (reply to reply)",
+            "reply_to_id": first_reply_id,
+        })
+        assert second_reply.status_code == 201
+        assert second_reply.json()["reply_to_id"] == first_reply_id
 
 
 class TestInboxAndSent:
@@ -117,6 +214,13 @@ class TestListMails:
         assert r.status_code == 200
         assert isinstance(r.json(), list)
 
+    def test_list_mails_each_has_reply_to_id_field(self, http, sender_token):
+        r = http.get("/api/mails", headers=auth_headers(sender_token),
+                     params={"box": "sent"})
+        assert r.status_code == 200
+        for mail in r.json():
+            assert "reply_to_id" in mail
+
     def test_search_by_subject(self, http, sender_token):
         r = http.get("/api/mails", headers=auth_headers(sender_token),
                      params={"box": "sent", "search": "E2E Test Mail"})
@@ -127,7 +231,6 @@ class TestListMails:
 
 class TestDeleteMail:
     def test_delete_own_sent_mail(self, http, sender_token):
-        # Send a mail specifically to delete
         r = http.post("/api/mails", headers=auth_headers(sender_token), json={
             "recipient": RECEIVER_EMAIL,
             "subject": "To be deleted",
@@ -136,16 +239,13 @@ class TestDeleteMail:
         assert r.status_code == 201
         mail_id = r.json()["id"]
 
-        # Delete it
         r2 = http.delete(f"/api/mails/{mail_id}", headers=auth_headers(sender_token))
         assert r2.status_code == 200
 
-        # Confirm it's gone
         r3 = http.get(f"/api/mails/{mail_id}", headers=auth_headers(sender_token))
         assert r3.status_code == 404
 
     def test_delete_others_mail_returns_404(self, http, receiver_token, sender_token):
-        # Sender sends a mail
         r = http.post("/api/mails", headers=auth_headers(sender_token), json={
             "recipient": RECEIVER_EMAIL,
             "subject": "Not yours",
@@ -154,7 +254,6 @@ class TestDeleteMail:
         assert r.status_code == 201
         mail_id = r.json()["id"]
 
-        # Receiver tries to delete sender's mail — should 404
         r2 = http.delete(f"/api/mails/{mail_id}", headers=auth_headers(receiver_token))
         assert r2.status_code == 404
 

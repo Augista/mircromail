@@ -11,6 +11,7 @@ class MailCreate(BaseModel):
     recipient: EmailStr
     subject: Optional[str] = None
     body: Optional[str] = None
+    reply_to_id: Optional[int] = None
 
 # --------------------
 # RESPONSE MODEL
@@ -22,6 +23,7 @@ class MailResponse(BaseModel):
     subject: Optional[str]
     body: Optional[str]
     status: str
+    reply_to_id: Optional[int]
     created_at: datetime
 
     class Config:

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -18,14 +18,25 @@ interface MailComposerProps {
   isOpen: boolean
   onClose: () => void
   onSend?: (email: { to: string; subject: string; body: string }) => Promise<void>
+  initialValues?: { to: string; subject: string; body: string }
+  title?: string
 }
 
-export default function MailComposer({ isOpen, onClose, onSend }: MailComposerProps) {
+export default function MailComposer({ isOpen, onClose, onSend, initialValues, title }: MailComposerProps) {
   const [to, setTo] = useState('')
   const [subject, setSubject] = useState('')
   const [body, setBody] = useState('')
   const [isSending, setIsSending] = useState(false)
   const [error, setError] = useState('')
+
+  useEffect(() => {
+    if (isOpen) {
+      setTo(initialValues?.to ?? '')
+      setSubject(initialValues?.subject ?? '')
+      setBody(initialValues?.body ?? '')
+      setError('')
+    }
+  }, [isOpen, initialValues])
 
   const handleSend = async () => {
     if (!to || !subject || !body) {
@@ -40,7 +51,6 @@ export default function MailComposer({ isOpen, onClose, onSend }: MailComposerPr
       if (onSend) {
         await onSend({ to, subject, body })
       }
-      // Clear form
       setTo('')
       setSubject('')
       setBody('')
@@ -56,7 +66,7 @@ export default function MailComposer({ isOpen, onClose, onSend }: MailComposerPr
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>New Message</DialogTitle>
+          <DialogTitle>{title ?? 'New Message'}</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4">

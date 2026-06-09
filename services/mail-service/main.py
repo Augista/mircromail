@@ -74,7 +74,8 @@ def create_mail(payload: MailCreate, db: Session = Depends(get_db)):
         recipient=payload.recipient,
         subject=payload.subject,
         body=payload.body,
-        status="sent"
+        status="sent",
+        reply_to_id=payload.reply_to_id,
     )
 
     db.add(mail)

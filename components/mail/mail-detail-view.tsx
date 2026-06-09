@@ -2,7 +2,7 @@
 
 import { Button } from '@/components/ui/button'
 import { formatDistanceToNow } from 'date-fns'
-import { Reply, ReplyAll, Forward, Archive, Trash2 } from 'lucide-react'
+import { Reply, Trash2 } from 'lucide-react'
 
 interface Email {
   id: string
@@ -18,11 +18,13 @@ interface Email {
 interface MailDetailViewProps {
   email: Email
   onDelete: () => void
+  onReply?: () => void
 }
 
 export default function MailDetailView({
   email,
   onDelete,
+  onReply,
 }: MailDetailViewProps) {
   return (
     <div className="flex flex-col h-full bg-card">
@@ -58,26 +60,11 @@ export default function MailDetailView({
 
       {/* Actions */}
       <div className="border-t border-border p-4 space-y-2">
-        {/* <div className="flex gap-2">
-          <Button variant="outline" size="sm" className="flex-1">
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" className="flex-1" onClick={onReply}>
             <Reply className="w-4 h-4 mr-2" />
             Reply
           </Button>
-          <Button variant="outline" size="sm" className="flex-1">
-            <ReplyAll className="w-4 h-4 mr-2" />
-            Reply All
-          </Button>
-          <Button variant="outline" size="sm" className="flex-1">
-            <Forward className="w-4 h-4 mr-2" />
-            Forward
-          </Button>
-        </div> */}
-
-        <div className="flex gap-2">
-          {/* <Button variant="outline" size="sm" className="flex-1">
-            <Archive className="w-4 h-4 mr-2" />
-            Archive
-          </Button> */}
           <Button
             variant="outline"
             size="sm"

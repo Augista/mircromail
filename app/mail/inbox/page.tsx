@@ -5,6 +5,7 @@ import useSWR from 'swr'
 import MailListView from '@/components/mail/mail-list-view'
 import MailDetailView from '@/components/mail/mail-detail-view'
 import MailSearch from '@/components/mail/mail-search'
+import MailComposer from '@/components/mail/mail-composer'
 import { useMail } from '../mail-provider'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
@@ -42,6 +43,8 @@ interface UIEmail {
 
 export default function InboxPage() {
   const [selectedEmailId, setSelectedEmailId] = useState<string | null>(null)
+  const [isReplyOpen, setIsReplyOpen] = useState(false)
+  const [replyInitialValues, setReplyInitialValues] = useState<{ to: string; subject: string; body: string } | undefined>()
   const { searchQuery } = useMail()
 
   const { data: rawEmails, mutate } = useSWR(`${API_URL}/api/mails?box=inbox`, fetcher)
@@ -93,6 +96,40 @@ export default function InboxPage() {
     }
   }
 
+  const handleReply = () => {
+    if (!selectedEmail) return
+    const reSubject = selectedEmail.subject.startsWith('Re:')
+      ? selectedEmail.subject
+      : `Re: ${selectedEmail.subject}`
+    setReplyInitialValues({
+      to: selectedEmail.from,
+      subject: reSubject,
+      body: `\n\n---\nOn ${selectedEmail.timestamp.toLocaleString()}, ${selectedEmail.fromName} wrote:\n${selectedEmail.body}`,
+    })
+    setIsReplyOpen(true)
+  }
+
+  const handleSendReply = async (email: { to: string; subject: string; body: string }) => {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
+    const response = await fetch(`${API_URL}/api/mails`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({
+        recipient: email.to,
+        subject: email.subject,
+        body: email.body,
+        reply_to_id: selectedEmail ? Number(selectedEmail.id) : undefined,
+      }),
+    })
+    if (!response.ok) {
+      const data = await response.json()
+      throw new Error(data.detail || 'Failed to send reply')
+    }
+  }
+
   return (
     <div className="flex h-full">
       <div className="flex-1 border-r border-border flex flex-col overflow-auto">
@@ -107,9 +144,17 @@ export default function InboxPage() {
           <MailDetailView
             email={selectedEmail}
             onDelete={() => handleDeleteEmail(selectedEmail.id)}
+            onReply={handleReply}
           />
         </div>
       )}
+      <MailComposer
+        isOpen={isReplyOpen}
+        onClose={() => setIsReplyOpen(false)}
+        onSend={handleSendReply}
+        initialValues={replyInitialValues}
+        title="Reply"
+      />
     </div>
   )
 }
