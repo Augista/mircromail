@@ -13,39 +13,7 @@ services:
     volumes:
       - auth_db_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U auth_user"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  composer_db:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_USER: composer_user
-      POSTGRES_PASSWORD: composer_password
-      POSTGRES_DB: composer_db
-    ports:
-      - "5433:5432"
-    volumes:
-      - composer_db_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U composer_user"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  storage_db:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_USER: storage_user
-      POSTGRES_PASSWORD: storage_password
-      POSTGRES_DB: storage_db
-    ports:
-      - "5434:5432"
-    volumes:
-      - storage_db_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U storage_user"]
+      test: ["CMD-SHELL", "pg_isready -U auth_user -d auth_db"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -79,7 +47,7 @@ services:
     volumes:
       - mail_db_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U mail_user"]
+      test: ["CMD-SHELL", "pg_isready -U mail_user -d mail_db"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -146,39 +114,6 @@ services:
       jaeger:
         condition: service_started
 
-  # Mail Composer Service
-  composer_service:
-    build:
-      context: ./services/composer-service
-      dockerfile: Dockerfile
-    environment:
-      DATABASE_URL: postgresql://composer_user:composer_password@composer_db:5432/composer_db
-      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
-    ports:
-      - "8002:8002"
-    depends_on:
-      composer_db:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
-
-  # Mail Storage Service
-  storage_service:
-    build:
-      context: ./services/storage-service
-      dockerfile: Dockerfile
-    environment:
-      DATABASE_URL: postgresql://storage_user:storage_password@storage_db:5432/storage_db
-      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
-    ports:
-      - "8003:8003"
-    depends_on:
-      storage_db:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
-
-
   # Jaeger Distributed Tracing
   jaeger:
     image: jaegertracing/all-in-one:1.56
@@ -221,8 +156,6 @@ services:
 
 volumes:
   auth_db_data:
-  composer_db_data:
-  storage_db_data:
   mail_db_data:
   rabbitmq_data:
   prometheus_data:

@@ -11,6 +11,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Search, Settings, LogOut, User } from 'lucide-react'
+import { useMail } from '@/app/mail/mail-provider'
 
 interface UserData {
   id: string
@@ -22,6 +23,7 @@ export default function MailHeader() {
   const router = useRouter()
 
   const [user, setUser] = useState<UserData | null>(null)
+  const { setSearchQuery } = useMail()
 
   useEffect(() => {
     const storedUser = localStorage.getItem('user')
@@ -48,6 +50,7 @@ export default function MailHeader() {
         <Input
           type="search"
           placeholder="Search emails..."
+          onChange={(e) => setSearchQuery(e.target.value)}
           className="border-0 bg-transparent text-sm focus:ring-0 focus:outline-none"
         />
       </div>
