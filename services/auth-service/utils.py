@@ -32,7 +32,7 @@ class JWTManager:
             'email': email,
             'type': 'access',
             'iat': datetime.utcnow(),
-            'exp': datetime.utcnow() + timedelta(hours=settings.JWT_EXPIRATION_HOURS)
+            'exp': datetime.utcnow() + timedelta(minutes=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES)
         }
         token = jwt.encode(
             payload,
@@ -79,4 +79,4 @@ class JWTManager:
         """Get token expiration in seconds"""
         if token_type == 'refresh':
             return settings.JWT_REFRESH_EXPIRATION_DAYS * 24 * 3600
-        return settings.JWT_EXPIRATION_HOURS * 3600
+        return settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60

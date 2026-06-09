@@ -2,6 +2,12 @@ from fastapi import FastAPI, HTTPException, Request, status
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session
 from prometheus_fastapi_instrumentator import Instrumentator
+from opentelemetry import trace
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.sdk.resources import Resource
+from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 import logging
 import sys
 import os
@@ -26,6 +32,13 @@ from utils import PasswordManager, JWTManager
 logging.basicConfig(level=settings.LOG_LEVEL)
 logger = logging.getLogger(__name__)
 
+def setup_tracing(service_name: str):
+    endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://jaeger:4317")
+    resource = Resource.create({"service.name": service_name})
+    provider = TracerProvider(resource=resource)
+    provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter(endpoint=endpoint)))
+    trace.set_tracer_provider(provider)
+
 app = FastAPI(
     title="MicroMail Auth Service",
     description="User authentication and JWT token management",
@@ -43,6 +56,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+setup_tracing(os.getenv("OTEL_SERVICE_NAME", "auth-service"))
+FastAPIInstrumentor.instrument_app(app)
 Instrumentator().instrument(app).expose(app)
 
 # Database setup

@@ -2,6 +2,13 @@ from fastapi import FastAPI, Request, HTTPException, status, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials
+from prometheus_fastapi_instrumentator import Instrumentator
+from opentelemetry import trace
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.sdk.resources import Resource
+from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 import httpx
 import logging
 import os
@@ -12,16 +19,28 @@ sys.path.insert(0, os.path.dirname(__file__))
 
 from config import settings
 from middleware.auth import JWTBearer, verify_token, decode_token
+from circuit_breaker import CircuitBreaker, CircuitOpenError
 
 # Configure logging
 logging.basicConfig(level=settings.LOG_LEVEL)
 logger = logging.getLogger(__name__)
+
+def setup_tracing(service_name: str):
+    endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://jaeger:4317")
+    resource = Resource.create({"service.name": service_name})
+    provider = TracerProvider(resource=resource)
+    provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter(endpoint=endpoint)))
+    trace.set_tracer_provider(provider)
 
 app = FastAPI(
     title="MicroMail API Gateway",
     description="Central routing gateway for all microservices",
     version="1.0.0"
 )
+
+setup_tracing(os.getenv("OTEL_SERVICE_NAME", "api-gateway"))
+FastAPIInstrumentor.instrument_app(app)
+Instrumentator().instrument(app).expose(app)
 
 # Add CORS middleware
 app.add_middleware(
@@ -41,6 +60,11 @@ async def unhandled_exception_handler(_request: Request, exc: Exception):
         content={"detail": "Internal server error"},
         headers={"Access-Control-Allow-Origin": "*"},
     )
+# Circuit breakers — one per downstream service
+auth_cb = CircuitBreaker("auth-service", failure_threshold=5, reset_timeout=30.0, jitter_max=10.0)
+mail_cb = CircuitBreaker("mail-service", failure_threshold=5, reset_timeout=30.0, jitter_max=10.0)
+composer_cb = CircuitBreaker("composer-service", failure_threshold=5, reset_timeout=30.0, jitter_max=10.0)
+
 # JWT Bearer authentication
 jwt_bearer = JWTBearer(auto_error=False)
 
@@ -71,18 +95,15 @@ async def register(request: Request):
     body = await request.json()
     async with httpx.AsyncClient() as client:
         try:
-            response = await client.post(
-                f"{settings.AUTH_SERVICE_URL}/register",
-                json=body,
-                timeout=10.0
+            response = await auth_cb.call(
+                client.post(f"{settings.AUTH_SERVICE_URL}/register", json=body, timeout=10.0)
             )
             return proxy_response(response)
+        except CircuitOpenError:
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Auth Service unavailable (circuit open)")
         except httpx.RequestError as e:
             logger.error(f"Auth Service error: {str(e)}")
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Auth Service unavailable"
-            )
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Auth Service unavailable")
 
 
 @app.post("/api/auth/login")
@@ -91,18 +112,15 @@ async def login(request: Request):
     body = await request.json()
     async with httpx.AsyncClient() as client:
         try:
-            response = await client.post(
-                f"{settings.AUTH_SERVICE_URL}/login",
-                json=body,
-                timeout=10.0
+            response = await auth_cb.call(
+                client.post(f"{settings.AUTH_SERVICE_URL}/login", json=body, timeout=10.0)
             )
             return proxy_response(response)
+        except CircuitOpenError:
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Auth Service unavailable (circuit open)")
         except httpx.RequestError as e:
             logger.error(f"Auth Service error: {str(e)}")
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Auth Service unavailable"
-            )
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Auth Service unavailable")
 
 
 @app.get("/api/auth/me")
@@ -114,18 +132,15 @@ async def get_current_user(request: Request):
 
     async with httpx.AsyncClient() as client:
         try:
-            response = await client.get(
-                f"{settings.AUTH_SERVICE_URL}/me",
-                headers={"Authorization": auth_header},
-                timeout=10.0
+            response = await auth_cb.call(
+                client.get(f"{settings.AUTH_SERVICE_URL}/me", headers={"Authorization": auth_header}, timeout=10.0)
             )
             return proxy_response(response)
+        except CircuitOpenError:
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Auth Service unavailable (circuit open)")
         except httpx.RequestError as e:
             logger.error(f"Auth Service error: {str(e)}")
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Auth Service unavailable"
-            )
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Auth Service unavailable")
 
 
 @app.post("/api/auth/refresh")
@@ -134,18 +149,15 @@ async def refresh(request: Request):
     body = await request.json()
     async with httpx.AsyncClient() as client:
         try:
-            response = await client.post(
-                f"{settings.AUTH_SERVICE_URL}/refresh",
-                json=body,
-                timeout=10.0
+            response = await auth_cb.call(
+                client.post(f"{settings.AUTH_SERVICE_URL}/refresh", json=body, timeout=10.0)
             )
             return proxy_response(response)
+        except CircuitOpenError:
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Auth Service unavailable (circuit open)")
         except httpx.RequestError as e:
             logger.error(f"Auth Service error: {str(e)}")
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Auth Service unavailable"
-            )
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Auth Service unavailable")
 
 
 # ==================== DRAFTS ROUTES ====================
@@ -159,18 +171,15 @@ async def list_drafts(request: Request, credentials: HTTPAuthorizationCredential
     token = credentials.credentials
     async with httpx.AsyncClient() as client:
         try:
-            response = await client.get(
-                f"{settings.COMPOSER_SERVICE_URL}/drafts",
-                headers={"Authorization": f"Bearer {token}"},
-                timeout=10.0
+            response = await composer_cb.call(
+                client.get(f"{settings.COMPOSER_SERVICE_URL}/drafts", headers={"Authorization": f"Bearer {token}"}, timeout=10.0)
             )
             return proxy_response(response)
+        except CircuitOpenError:
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Composer Service unavailable (circuit open)")
         except httpx.RequestError as e:
             logger.error(f"Composer Service error: {str(e)}")
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Composer Service unavailable"
-            )
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Composer Service unavailable")
 
 
 @app.post("/api/drafts")
@@ -183,19 +192,15 @@ async def create_draft(request: Request, credentials: HTTPAuthorizationCredentia
     body = await request.json()
     async with httpx.AsyncClient() as client:
         try:
-            response = await client.post(
-                f"{settings.COMPOSER_SERVICE_URL}/drafts",
-                json=body,
-                headers={"Authorization": f"Bearer {token}"},
-                timeout=10.0
+            response = await composer_cb.call(
+                client.post(f"{settings.COMPOSER_SERVICE_URL}/drafts", json=body, headers={"Authorization": f"Bearer {token}"}, timeout=10.0)
             )
             return proxy_response(response)
+        except CircuitOpenError:
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Composer Service unavailable (circuit open)")
         except httpx.RequestError as e:
             logger.error(f"Composer Service error: {str(e)}")
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Composer Service unavailable"
-            )
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Composer Service unavailable")
 
 
 @app.put("/api/drafts/{draft_id}")
@@ -208,19 +213,15 @@ async def update_draft(draft_id: str, request: Request, credentials: HTTPAuthori
     body = await request.json()
     async with httpx.AsyncClient() as client:
         try:
-            response = await client.put(
-                f"{settings.COMPOSER_SERVICE_URL}/drafts/{draft_id}",
-                json=body,
-                headers={"Authorization": f"Bearer {token}"},
-                timeout=10.0
+            response = await composer_cb.call(
+                client.put(f"{settings.COMPOSER_SERVICE_URL}/drafts/{draft_id}", json=body, headers={"Authorization": f"Bearer {token}"}, timeout=10.0)
             )
             return proxy_response(response)
+        except CircuitOpenError:
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Composer Service unavailable (circuit open)")
         except httpx.RequestError as e:
             logger.error(f"Composer Service error: {str(e)}")
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Composer Service unavailable"
-            )
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Composer Service unavailable")
 
 
 @app.delete("/api/drafts/{draft_id}")
@@ -232,18 +233,15 @@ async def delete_draft(draft_id: str, request: Request, credentials: HTTPAuthori
     token = credentials.credentials
     async with httpx.AsyncClient() as client:
         try:
-            response = await client.delete(
-                f"{settings.COMPOSER_SERVICE_URL}/drafts/{draft_id}",
-                headers={"Authorization": f"Bearer {token}"},
-                timeout=10.0
+            response = await composer_cb.call(
+                client.delete(f"{settings.COMPOSER_SERVICE_URL}/drafts/{draft_id}", headers={"Authorization": f"Bearer {token}"}, timeout=10.0)
             )
             return proxy_response(response)
+        except CircuitOpenError:
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Composer Service unavailable (circuit open)")
         except httpx.RequestError as e:
             logger.error(f"Composer Service error: {str(e)}")
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Composer Service unavailable"
-            )
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Composer Service unavailable")
 
 
 @app.post("/api/drafts/{draft_id}/send")
@@ -255,18 +253,15 @@ async def send_draft(draft_id: str, request: Request, credentials: HTTPAuthoriza
     token = credentials.credentials
     async with httpx.AsyncClient() as client:
         try:
-            response = await client.post(
-                f"{settings.COMPOSER_SERVICE_URL}/drafts/{draft_id}/send",
-                headers={"Authorization": f"Bearer {token}"},
-                timeout=10.0
+            response = await composer_cb.call(
+                client.post(f"{settings.COMPOSER_SERVICE_URL}/drafts/{draft_id}/send", headers={"Authorization": f"Bearer {token}"}, timeout=10.0)
             )
             return proxy_response(response)
+        except CircuitOpenError:
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Composer Service unavailable (circuit open)")
         except httpx.RequestError as e:
             logger.error(f"Composer Service error: {str(e)}")
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Composer Service unavailable"
-            )
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Composer Service unavailable")
 
 
 # ==================== EMAIL ROUTES ====================
@@ -285,18 +280,15 @@ async def get_inbox(request: Request, credentials: HTTPAuthorizationCredentials 
 
     async with httpx.AsyncClient() as client:
         try:
-            response = await client.get(
-                f"{settings.MAIL_SERVICE_URL}/mails",
-                params={"email": user_email, "box": "inbox", "skip": skip, "limit": limit},
-                timeout=10.0
+            response = await mail_cb.call(
+                client.get(f"{settings.MAIL_SERVICE_URL}/mails", params={"email": user_email, "box": "inbox", "skip": skip, "limit": limit}, timeout=10.0)
             )
             return proxy_response(response)
+        except CircuitOpenError:
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Mail Service unavailable (circuit open)")
         except httpx.RequestError as e:
             logger.error(f"Mail Service error: {str(e)}")
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Mail Service unavailable"
-            )
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Mail Service unavailable")
 
 
 @app.get("/api/sent")
@@ -313,18 +305,15 @@ async def get_sent(request: Request, credentials: HTTPAuthorizationCredentials |
 
     async with httpx.AsyncClient() as client:
         try:
-            response = await client.get(
-                f"{settings.MAIL_SERVICE_URL}/mails",
-                params={"email": user_email, "box": "sent", "skip": skip, "limit": limit},
-                timeout=10.0
+            response = await mail_cb.call(
+                client.get(f"{settings.MAIL_SERVICE_URL}/mails", params={"email": user_email, "box": "sent", "skip": skip, "limit": limit}, timeout=10.0)
             )
             return proxy_response(response)
+        except CircuitOpenError:
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Mail Service unavailable (circuit open)")
         except httpx.RequestError as e:
             logger.error(f"Mail Service error: {str(e)}")
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Mail Service unavailable"
-            )
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Mail Service unavailable")
 
 
 # ==================== MAIL ROUTES ====================
@@ -354,18 +343,15 @@ async def list_mails(
 
     async with httpx.AsyncClient() as client:
         try:
-            response = await client.get(
-                f"{settings.MAIL_SERVICE_URL}/mails",
-                params=params,
-                timeout=10.0
+            response = await mail_cb.call(
+                client.get(f"{settings.MAIL_SERVICE_URL}/mails", params=params, timeout=10.0)
             )
             return proxy_response(response)
+        except CircuitOpenError:
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Mail Service unavailable (circuit open)")
         except httpx.RequestError as e:
             logger.error(f"Mail Service error: {str(e)}")
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Mail Service unavailable"
-            )
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Mail Service unavailable")
 
 
 @app.post("/api/mails")
@@ -385,18 +371,15 @@ async def create_mail(request: Request, credentials: HTTPAuthorizationCredential
 
     async with httpx.AsyncClient() as client:
         try:
-            response = await client.post(
-                f"{settings.MAIL_SERVICE_URL}/mails",
-                json=body,
-                timeout=10.0
+            response = await mail_cb.call(
+                client.post(f"{settings.MAIL_SERVICE_URL}/mails", json=body, timeout=10.0)
             )
             return proxy_response(response)
+        except CircuitOpenError:
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Mail Service unavailable (circuit open)")
         except httpx.RequestError as e:
             logger.error(f"Mail Service error: {str(e)}")
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Mail Service unavailable"
-            )
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Mail Service unavailable")
 
 
 @app.get("/api/mails/{mail_id}")
@@ -407,17 +390,15 @@ async def get_mail(mail_id: int, request: Request, credentials: HTTPAuthorizatio
 
     async with httpx.AsyncClient() as client:
         try:
-            response = await client.get(
-                f"{settings.MAIL_SERVICE_URL}/mails/{mail_id}",
-                timeout=10.0
+            response = await mail_cb.call(
+                client.get(f"{settings.MAIL_SERVICE_URL}/mails/{mail_id}", timeout=10.0)
             )
             return proxy_response(response)
+        except CircuitOpenError:
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Mail Service unavailable (circuit open)")
         except httpx.RequestError as e:
             logger.error(f"Mail Service error: {str(e)}")
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Mail Service unavailable"
-            )
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Mail Service unavailable")
 
 
 @app.delete("/api/mails/{mail_id}")
@@ -434,18 +415,15 @@ async def delete_mail(mail_id: int, request: Request, credentials: HTTPAuthoriza
 
     async with httpx.AsyncClient() as client:
         try:
-            response = await client.delete(
-                f"{settings.MAIL_SERVICE_URL}/mails/{mail_id}",
-                params={"email": user_email},
-                timeout=10.0
+            response = await mail_cb.call(
+                client.delete(f"{settings.MAIL_SERVICE_URL}/mails/{mail_id}", params={"email": user_email}, timeout=10.0)
             )
             return proxy_response(response)
+        except CircuitOpenError:
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Mail Service unavailable (circuit open)")
         except httpx.RequestError as e:
             logger.error(f"Mail Service error: {str(e)}")
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Mail Service unavailable"
-            )
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Mail Service unavailable")
 
 
 if __name__ == "__main__":

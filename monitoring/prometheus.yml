@@ -22,7 +22,7 @@ scrape_configs:
       - targets: ["storage_service:8003"]
     metrics_path: /metrics
 
-  - job_name: delivery-service
+  - job_name: mail-service
     static_configs:
-      - targets: ["delivery_service:8004"]
+      - targets: ["mail_service:8004"]
     metrics_path: /metrics

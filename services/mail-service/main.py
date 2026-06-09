@@ -3,18 +3,38 @@ from fastapi import FastAPI, Depends, HTTPException, Query
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from fastapi.middleware.cors import CORSMiddleware
+from prometheus_fastapi_instrumentator import Instrumentator
+from opentelemetry import trace
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.sdk.resources import Resource
+from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from database import SessionLocal
 from models.mail import Mail, MailBox
 from schemas.mail import MailCreate, MailResponse
 from lib.event import publish_mail_sent
 
 from config import settings
+import os
+
+def setup_tracing(service_name: str):
+    endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://jaeger:4317")
+    resource = Resource.create({"service.name": service_name})
+    provider = TracerProvider(resource=resource)
+    provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter(endpoint=endpoint)))
+    trace.set_tracer_provider(provider)
 
 app = FastAPI(
     title="MicroMail Mail Service",
     description="Mail service responsible for delivering and managing mails",
     version="1.0.0"
 )
+
+setup_tracing(os.getenv("OTEL_SERVICE_NAME", "mail-service"))
+FastAPIInstrumentor.instrument_app(app)
+Instrumentator().instrument(app).expose(app)
+
 origins = [  "http://localhost",
     "http://localhost:3000",]
 

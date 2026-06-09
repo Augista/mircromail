@@ -92,6 +92,8 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg2://mail_user:mail_password@mail_db:5432/mail_db
       RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4317
+      OTEL_SERVICE_NAME: mail-service
     ports:
       - "8004:8004"
     depends_on:
@@ -99,6 +101,8 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
+      jaeger:
+        condition: service_started
 
   # API Gateway
   api_gateway:
@@ -110,11 +114,14 @@ services:
       MAIL_SERVICE_URL: http://mail_service:8004
       JWT_SECRET: your-secret-key-change-in-production
       FRONTEND_URL: http://localhost:3000
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4317
+      OTEL_SERVICE_NAME: api-gateway
     ports:
       - "8000:8000"
     depends_on:
       - auth_service
       - mail_service
+      - jaeger
 
   # Auth Service
   auth_service:
@@ -124,7 +131,11 @@ services:
     environment:
       AUTH_DB_URL: postgresql://auth_user:auth_password@auth_db:5432/auth_db
       JWT_SECRET: your-secret-key-change-in-production
+      JWT_ACCESS_TOKEN_EXPIRE_MINUTES: 30
+      JWT_REFRESH_EXPIRATION_DAYS: 30
       RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4317
+      OTEL_SERVICE_NAME: auth-service
     ports:
       - "8001:8001"
     depends_on:
@@ -132,6 +143,8 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
+      jaeger:
+        condition: service_started
 
   # Mail Composer Service
   composer_service:
@@ -165,22 +178,16 @@ services:
       rabbitmq:
         condition: service_healthy
 
-  # Mail Delivery Service
-  delivery_service:
-    build:
-      context: ./services/delivery-service
-      dockerfile: Dockerfile
+
+  # Jaeger Distributed Tracing
+  jaeger:
+    image: jaegertracing/all-in-one:1.56
     environment:
-      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
-      SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
-      SMTP_PORT: ${SMTP_PORT:-587}
-      SMTP_USER: ${SMTP_USER}
-      SMTP_PASSWORD: ${SMTP_PASSWORD}
+      COLLECTOR_OTLP_ENABLED: "true"
     ports:
-      - "8004:8004"
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
+      - "16686:16686"
+      - "4317:4317"
+      - "4318:4318"
 
   # Prometheus
   prometheus:
