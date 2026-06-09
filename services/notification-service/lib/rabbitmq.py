@@ -8,26 +8,48 @@ from database import SessionLocal
 from models.notification import Notification
 
 def process_message(ch, method, properties, body, loop):
+    """
+    Fungsi ini dieksekusi saat ada pesan masuk dari RabbitMQ
+    """
     try:
-        message_data = json.loads(body)
-        print(f"[x] Menerima pesan dari RabbitMQ: {message_data}")
+        # 1. Parse JSON dari Mail Service
+        payload = json.loads(body)
+        print(f"[x] Menerima pesan dari RabbitMQ: {payload}")
         
-        user_id = message_data.get("user_id")
-        title = message_data.get("title", "Notifikasi Baru")
-        msg_body = message_data.get("body", "")
+        # 2. Cek apakah ini event pengiriman email
+        event_type = payload.get("type")
+        if event_type != "MAIL_SENT":
+            return  # Abaikan event jika bukan tentang email terkirim
+            
+        # 3. Ekstrak data berdasarkan format buatan Tata
+        data = payload.get("data", {})
+        user_id = data.get("recipient")  # Email penerima menjadi target WebSocket
+        title = data.get("subject", "Tidak ada subjek")
+        sender = data.get("sender", "Seseorang")
+        msg_body = f"Kamu mendapat email baru dari {sender}."
         
         if user_id:
+            # 4. Simpan ke Database
             db = SessionLocal()
             new_notif = Notification(user_id=str(user_id), title=title, message=msg_body)
             db.add(new_notif)
             db.commit()
             db.refresh(new_notif)
             
-            message_data["id"] = new_notif.id
+            # 5. Format ulang data untuk dikirim ke frontend via WebSocket
+            ws_message = {
+                "id": new_notif.id,
+                "user_id": user_id,
+                "title": title,
+                "message": msg_body,
+                "is_read": False,
+                "type": "NEW_EMAIL"
+            }
             db.close()
 
+            # 6. Kirim via WebSocket ke frontend
             asyncio.run_coroutine_threadsafe(
-                manager.send_personal_message(json.dumps(message_data), str(user_id)),
+                manager.send_personal_message(json.dumps(ws_message), str(user_id)),
                 loop
             )
             
