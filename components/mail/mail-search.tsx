@@ -4,6 +4,7 @@ import { useState, useCallback } from 'react'
 import { Input } from '@/components/ui/input'
 import { Search, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { useMail } from '@/app/mail/mail-provider'
 
 interface MailSearchProps {
   onSearch: (query: string) => void
@@ -12,6 +13,7 @@ interface MailSearchProps {
 
 export default function MailSearch({ onSearch, placeholder = 'Search emails...' }: MailSearchProps) {
   const [query, setQuery] = useState('')
+  const { setSearchQuery } = useMail()
 
   const handleSearch = useCallback((value: string) => {
     setQuery(value)
@@ -30,7 +32,7 @@ export default function MailSearch({ onSearch, placeholder = 'Search emails...' 
         type="text"
         placeholder={placeholder}
         value={query}
-        onChange={(e) => handleSearch(e.target.value)}
+        onChange={(e) => setSearchQuery(e.target.value)}
         className="border-0 bg-transparent text-sm focus:ring-0 focus:outline-none"
       />
       {query && (

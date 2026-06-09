@@ -4,6 +4,8 @@ import { useState, useMemo } from 'react'
 import useSWR from 'swr'
 import MailListView from '@/components/mail/mail-list-view'
 import MailDetailView from '@/components/mail/mail-detail-view'
+import MailSearch from '@/components/mail/mail-search'
+import { useMail } from '../mail-provider'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
@@ -40,7 +42,7 @@ interface UIEmail {
 
 export default function InboxPage() {
   const [selectedEmailId, setSelectedEmailId] = useState<string | null>(null)
-  const [searchQuery, setSearchQuery] = useState('')
+  const { searchQuery } = useMail()
 
   const { data: rawEmails, mutate } = useSWR(`${API_URL}/api/mails?box=inbox`, fetcher)
 
@@ -53,11 +55,11 @@ export default function InboxPage() {
       to: email.recipient,
       subject: email.subject,
       body: email.body,
-      preview: email.body.length > 80 ? email.body.substring(0, 80) + '...' : email.body,
+      preview: email.body.length > 200 ? email.body.substring(0, 200) + '...' : email.body,
       read: email.status === 'read',
       isDraft: false,
       createdAt: email.created_at,
-      timestamp: new Date(email.created_at),
+      timestamp: new Date(email.created_at + 'Z'),
     }))
   }, [rawEmails])
 
@@ -94,16 +96,11 @@ export default function InboxPage() {
   return (
     <div className="flex h-full">
       <div className="flex-1 border-r border-border flex flex-col overflow-auto">
-        <div className="p-4 border-b border-border shrink-0">
-          {/* <MailSearch onSearch={setSearchQuery} /> */}
-        </div>
-        <div className="flex-1 overflow-auto">
-          <MailListView
-            emails={filteredEmails}
-            selectedEmailId={selectedEmailId}
-            onSelectEmail={handleSelectEmail}
-          />
-        </div>
+        <MailListView
+          emails={filteredEmails}
+          selectedEmailId={selectedEmailId}
+          onSelectEmail={handleSelectEmail}
+        />
       </div>
       {selectedEmail && (
         <div className="w-1/2 overflow-auto">

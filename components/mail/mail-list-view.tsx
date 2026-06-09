@@ -37,7 +37,7 @@ export default function MailListView({
             key={email.id}
             onClick={() => onSelectEmail(email.id)}
             className={cn(
-              'w-full text-left px-4 py-3 hover:bg-muted transition-colors border-l-2 border-transparent',
+              'w-full text-left px-4 py-3 hover:bg-muted transition-colors border border-bottom',
               selectedEmailId === email.id
                 ? 'bg-muted border-l-primary'
                 : email.read
@@ -46,8 +46,8 @@ export default function MailListView({
             )}
           >
             <div className="flex items-start gap-3">
-              <Checkbox checked={false} className="mt-1 flex-shrink-0" aria-readonly />
-              <div className="flex-1 min-w-0">
+              {/* <Checkbox checked={false} className="mt-1 flex-shrink-0" aria-readonly /> */}
+              <div className="flex-1 min-w-">
                 <div className="flex items-center justify-between gap-2">
                   <p className="font-medium text-sm text-foreground truncate">
                     {email.fromName}
